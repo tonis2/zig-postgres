@@ -185,10 +185,6 @@ pub const Pg = struct {
         defer command.deinit();
     }
 
-    pub fn insert(self: Self, query: []const u8) !void {
-        _ = try self.exec(query);
-    }
-
     pub fn exec(self: Self, query: []const u8) !Result {
         var cstr_query = try std.cstr.addNullByte(self.allocator, query);
         defer self.allocator.free(cstr_query);

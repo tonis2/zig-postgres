@@ -19,7 +19,7 @@ pub fn main() !void {
         \\CREATE TABLE IF NOT EXISTS accounts (id INT, balance INT);
     ;
 
-    try db.insert(schema);
+    _ = try db.exec(schema);
     try db.insertAuto(Accounts{
         .id = 4,
         .balance = 5,
