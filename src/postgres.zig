@@ -6,6 +6,7 @@ const helpers = @import("./helpers.zig");
 
 const print = std.debug.print;
 const ArrayList = std.ArrayList;
+const Builder = @import("./sql_builder.zig").Builder;
 
 pub const Error = error{ ConnectionFailure, QueryFailure, NotConnected };
 
@@ -132,61 +133,87 @@ pub const Pg = struct {
         };
     }
 
-    pub fn insertAuto(self: Self, comptime data: anytype) !void {
-        const struct_fields = @typeInfo(@TypeOf(data)).Struct.fields;
-        const struct_name = @typeName(@TypeOf(data));
+    pub fn insert(self: Self, comptime data: anytype) !void {
+        var builder = try Builder.new(.Insert, self.allocator);
 
-        var command = ArrayList(u8).init(self.allocator);
+        const type_info = @typeInfo(@TypeOf(data));
 
-        _ = try command.writer().write(
-            "INSERT INTO ",
-        );
+        switch (type_info) {
+            .Pointer => {
+                const pointer_type = @typeInfo(type_info.Pointer.child);
+                if (pointer_type == .Array) {
+                    // For each item in inserted array
+                    for (data) |child, child_index| {
 
-        //Write keys
-        _ = try command.writer().write(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
-        _ = try command.writer().write(" (");
-        inline for (struct_fields) |field, index| {
-            if (index == struct_fields.len - 1) {
-                _ = try command.writer().write(field.name);
-                _ = try command.writer().write(") ");
-            } else {
-                _ = try command.writer().write(field.name);
-                _ = try command.writer().write(",");
-            }
+                        //Set table name as first items struct name.
+                        if (child_index == 0) {
+                            const table_name = @typeName(@TypeOf(child));
+                            try builder.useTable(helpers.toLowerCase(table_name.len, table_name)[0..]);
+                        }
+
+                        const struct_fields = @typeInfo(@TypeOf(child)).Struct.fields;
+
+                        inline for (struct_fields) |field, index| {
+                            const field_value = @field(child, field.name);
+                            const field_type: type = field.field_type;
+
+                            if (child_index == 0) {
+                                try builder.addColumn(field.name);
+                            }
+
+                            switch (field_type) {
+                                //Cast int to string
+                                u8, u16, u32, usize => {
+                                    var buffer: [200]u8 = undefined;
+                                    const str_value = try std.fmt.bufPrint(buffer[0..], "{d}", .{field_value});
+                                    try builder.addValue(str_value[0..]);
+                                },
+                                []const u8 => {
+                                    try builder.addValue(field_value);
+                                },
+                                else => {
+                                    //Todo other types
+                                },
+                            }
+                        }
+                    }
+                }
+            },
+            .Struct => {
+                const struct_fields = @typeInfo(@TypeOf(data)).Struct.fields;
+                const struct_name = @typeName(@TypeOf(data));
+
+                try builder.useTable(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
+                inline for (struct_fields) |field, index| {
+                    const field_value = @field(data, field.name);
+                    const field_type: type = field.field_type;
+
+                    try builder.addColumn(field.name);
+
+                    switch (field_type) {
+                        //Cast int to string
+                        u8, u16, u32, usize => {
+                            var buffer: [200]u8 = undefined;
+                            const str_value = try std.fmt.bufPrint(buffer[0..], "{d}", .{field_value});
+                            try builder.addValue(str_value[0..]);
+                        },
+                        []const u8 => {
+                            try builder.addValue(field_value);
+                        },
+                        else => {
+                            //Todo other types
+                        },
+                    }
+                }
+            },
+            else => {},
         }
 
-        //Write values
-        _ = try command.writer().write("VALUES (");
-
-        inline for (struct_fields) |field, index| {
-            const field_type: type = field.field_type;
-            const field_value = @field(data, field.name);
-
-            switch (field_type) {
-                //Cast int to string
-                u8, u16, u32, usize => {
-                    var buffer: [200]u8 = undefined;
-                    const str_value = try std.fmt.bufPrint(buffer[0..], "{d}", .{field_value});
-                    _ = try command.writer().write(str_value[0..]);
-                },
-                []const u8 => {
-                    _ = try command.writer().write(field_value);
-                },
-                else => {
-                    //Todo other types
-                },
-            }
-
-            if (index == struct_fields.len - 1) {
-                _ = try command.writer().write(");");
-            } else {
-                _ = try command.writer().write(",");
-            }
-        }
-
+        try builder.end();
+        print("command {s} \n", .{builder.commands.items});
         //Exec command
-        _ = try self.exec(command.items);
-        defer command.deinit();
+        // _ = try self.exec(command.items);
+        defer builder.deinit();
     }
 
     pub fn exec(self: Self, query: []const u8) !Result {

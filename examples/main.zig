@@ -21,10 +21,27 @@ pub fn main() !void {
 
     _ = try db.exec(schema);
 
-    try db.insertAuto(Accounts{
+    const data = &[_]Accounts{
+        .{
+            .id = 4,
+            .balance = 5,
+        },
+        .{
+            .id = 5,
+            .balance = 5,
+        },
+        .{
+            .id = 6,
+            .balance = 7,
+        },
+    };
+
+    try db.insert(Accounts{
         .id = 4,
         .balance = 5,
     });
+
+    try db.insert(data);
 
     // var values = try db.queryBuilder(Accounts, .{ .name = "test" });
     // try db.exec("INSERT INTO accounts (id, balance) VALUES (1, 1000), (2, 250);");
