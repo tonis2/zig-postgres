@@ -20,10 +20,13 @@ pub fn main() !void {
     ;
 
     _ = try db.exec(schema);
+
     try db.insertAuto(Accounts{
         .id = 4,
         .balance = 5,
     });
+
+    // var values = try db.queryBuilder(Accounts, .{ .name = "test" });
     // try db.exec("INSERT INTO accounts (id, balance) VALUES (1, 1000), (2, 250);");
 
     var result = try db.exec("SELECT * FROM accounts");

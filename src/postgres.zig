@@ -163,13 +163,17 @@ pub const Pg = struct {
             const field_value = @field(data, field.name);
 
             switch (field_type) {
+                //Cast int to string
                 u8, u16, u32, usize => {
-                    var buffer: [100]u8 = undefined;
+                    var buffer: [200]u8 = undefined;
                     const str_value = try std.fmt.bufPrint(buffer[0..], "{d}", .{field_value});
                     _ = try command.writer().write(str_value[0..]);
                 },
-                else => {
+                []const u8 => {
                     _ = try command.writer().write(field_value);
+                },
+                else => {
+                    //Todo other types
                 },
             }
 
