@@ -2,9 +2,13 @@ const std = @import("std");
 const c = @cImport({
     @cInclude("libpq-fe.h");
 });
+const helpers = @import("./helpers.zig");
+
 const print = std.debug.print;
+const ArrayList = std.ArrayList;
 
 pub const Error = error{ ConnectionFailure, QueryFailure, NotConnected };
+
 pub const ColumnType = enum(usize) {
     Unknown = 0,
     Bool = 16,
@@ -25,7 +29,7 @@ pub const ColumnType = enum(usize) {
         switch (column_type) {
             .Int8, .Int4, .Int2 => {
                 if (Info == .Int or Info == .ComptimeInt) {
-                    return utility.strToNum(T, str) catch return error.TypesNotCompatible;
+                    // return utility.strToNum(T, str) catch return error.TypesNotCompatible;
                 }
                 return error.TypesNotCompatible;
             },
@@ -102,7 +106,7 @@ pub const Result = struct {
     }
 };
 
-pub const Database = struct {
+pub const Pg = struct {
     const Self = @This();
 
     connection: *c.PGconn,
@@ -128,6 +132,59 @@ pub const Database = struct {
         };
     }
 
+    pub fn insertAuto(self: Self, comptime data: anytype) !void {
+        const struct_fields = @typeInfo(@TypeOf(data)).Struct.fields;
+        const struct_name = @typeName(@TypeOf(data));
+
+        var command = ArrayList(u8).init(self.allocator);
+
+        _ = try command.writer().write(
+            "INSERT INTO ",
+        );
+
+        //Write keys
+        _ = try command.writer().write(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
+        _ = try command.writer().write(" (");
+        inline for (struct_fields) |field, index| {
+            if (index == struct_fields.len - 1) {
+                _ = try command.writer().write(field.name);
+                _ = try command.writer().write(") ");
+            } else {
+                _ = try command.writer().write(field.name);
+                _ = try command.writer().write(",");
+            }
+        }
+
+        //Write values
+        _ = try command.writer().write("VALUES (");
+
+        inline for (struct_fields) |field, index| {
+            const field_type: type = field.field_type;
+            const field_value = @field(data, field.name);
+
+            switch (field_type) {
+                u8, u16, u32, usize => {
+                    var buffer: [100]u8 = undefined;
+                    const str_value = try std.fmt.bufPrint(buffer[0..], "{d}", .{field_value});
+                    _ = try command.writer().write(str_value[0..]);
+                },
+                else => {
+                    _ = try command.writer().write(field_value);
+                },
+            }
+
+            if (index == struct_fields.len - 1) {
+                _ = try command.writer().write(");");
+            } else {
+                _ = try command.writer().write(",");
+            }
+        }
+
+        //Exec command
+        _ = try self.exec(command.items);
+        defer command.deinit();
+    }
+
     pub fn insert(self: Self, query: []const u8) !void {
         _ = try self.exec(query);
     }
@@ -137,8 +194,8 @@ pub const Database = struct {
         defer self.allocator.free(cstr_query);
 
         var res: ?*c.PGresult = c.PQexec(self.connection, cstr_query);
-
         var response_code = @enumToInt(c.PQresultStatus(res));
+
         if (response_code != c.PGRES_TUPLES_OK and response_code != c.PGRES_COMMAND_OK and response_code != c.PGRES_NONFATAL_ERROR) {
             var msg = c.PQresultErrorMessage(res);
             std.debug.warn("Error {s}\n", .{c.PQresultErrorMessage(res)});
@@ -155,9 +212,5 @@ pub const Database = struct {
 
     pub fn finish(self: *Self) void {
         c.PQfinish(self.connection);
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.allocator.free(val);
     }
 };
