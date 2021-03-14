@@ -3,103 +3,87 @@ const c = @cImport({
     @cInclude("libpq-fe.h");
 });
 const helpers = @import("./helpers.zig");
+const Error = @import("./definitions.zig").Error;
+const ColumnType = @import("./definitions.zig").ColumnType;
+const Builder = @import("./sql_builder.zig").Builder;
 
 const print = std.debug.print;
 const ArrayList = std.ArrayList;
-const Builder = @import("./sql_builder.zig").Builder;
-
-pub const Error = error{ ConnectionFailure, QueryFailure, NotConnected };
-
-pub const ColumnType = enum(usize) {
-    Unknown = 0,
-    Bool = 16,
-    Char = 18,
-    Int8 = 20,
-    Int2 = 21,
-    Int4 = 23,
-    Text = 25,
-    Float4 = 700,
-    Float8 = 701,
-    Varchar = 1043,
-    Date = 1082,
-    Time = 1083,
-    Timestamp = 1114,
-
-    pub fn castValue(column_type: ColumnType, comptime T: type, str: []const u8) !T {
-        const Info = @typeInfo(T);
-        switch (column_type) {
-            .Int8, .Int4, .Int2 => {
-                if (Info == .Int or Info == .ComptimeInt) {
-                    // return utility.strToNum(T, str) catch return error.TypesNotCompatible;
-                }
-                return error.TypesNotCompatible;
-            },
-            .Float4, .Float8 => {
-                // TODO need a function similar to strToNum but can understand the decimal point
-                return error.NotImplemented;
-            },
-            .Bool => {
-                if (T == bool and str.len > 0) {
-                    return str[0] == 't';
-                } else {
-                    return error.TypesNotCompatible;
-                }
-            },
-            .Char, .Text, .Varchar => {
-                // FIXME Zig compiler says this cannot be done at compile time
-                // if (utility.isStringType(T)) {
-                //     return str;
-                // }
-                // Workaround
-                if ((Info == .Pointer and Info.Pointer.size == .Slice and Info.Pointer.child == u8) or (Info == .Array and Info.Array.child == u8)) {
-                    return str;
-                } else if (Info == .Optional) {
-                    const ChildInfo = @typeInfo(Info.Optional.child);
-                    if (ChildInfo == .Pointer and ChildInfo.Pointer.Size == .Slice and ChildInfo.Pointer.child == u8) {
-                        return str;
-                    }
-                    if (ChildInfo == .Array and ChildInfo.child == u8) {
-                        return str;
-                    }
-                }
-                return error.TypesNotCompatible;
-            },
-            .Date => {
-                return error.NotImplemented;
-            },
-            .Time => {
-                return error.NotImplemented;
-            },
-            .Timestamp => {
-                return error.NotImplemented;
-            },
-            else => {
-                return error.TypesNotCompatible;
-            },
-        }
-        unreachable;
-    }
-};
 
 pub const Result = struct {
     res: *c.PGresult,
+    columns: usize,
+    rows: usize,
+    active_row: usize = 0,
+
     pub fn new(result: *c.PGresult) Result {
+        const rows = @intCast(usize, c.PQntuples(result));
+        const columns = @intCast(usize, c.PQnfields(result));
+
         return Result{
             .res = result,
+            .columns = columns,
+            .rows = rows,
         };
     }
 
-    pub fn numberOfRows(self: Result) usize {
-        return @intCast(usize, c.PQntuples(self.res));
+    fn columnName(self: Result, column_number: usize) ?[]const u8 {
+        const name = @as(?[*:0]const u8, c.PQfname(self.res, @intCast(c_int, column_number)));
+        if (name) |str| {
+            return str[0..std.mem.len(str)];
+        }
+        return null;
     }
 
-    pub fn numberOfColumns(self: Result) usize {
-        return @intCast(usize, c.PQnfields(self.res));
-    }
-
-    pub fn getType(self: Result, column_number: usize) ColumnType {
+    fn getType(self: Result, column_number: usize) ColumnType {
         var oid = @intCast(usize, c.PQftype(self.res, @intCast(c_int, column_number)));
         return std.meta.intToEnum(ColumnType, oid) catch return ColumnType.Unknown;
+    }
+
+    fn getValue(self: Result, row_number: usize, column_number: usize) []const u8 {
+        const value = @as(?[*:0]const u8, c.PQgetvalue(self.res, @intCast(c_int, row_number), @intCast(c_int, column_number)));
+        if (value) |str| {
+            return str[0..std.mem.len(str)];
+        }
+        return "";
+    }
+
+    pub fn parse(self: *Result, comptime returnType: type) ?returnType {
+        if (self.rows < 1) return null;
+        if (self.active_row == self.rows) {
+            //All rows returned
+            self.deinit();
+            return null;
+        }
+
+        const type_info = @typeInfo(returnType);
+        if (type_info != .Struct) {
+            @compileError("Need to use struct as parser type");
+        }
+
+        const struct_fields = type_info.Struct.fields;
+
+        var result: returnType = undefined;
+
+        //Lets loop thgrough all the columns and return active_row as a struct
+        var col_id: usize = 0;
+        while (col_id < self.columns) : (col_id += 1) {
+            const column_name = self.columnName(col_id);
+            const column_type = self.getType(col_id);
+
+            if (column_name) |name| {
+                const value = self.getValue(self.active_row, col_id);
+
+                inline for (struct_fields) |field| {
+                    if (std.mem.eql(u8, field.name, name)) {
+                        @field(result, field.name) = column_type.castValue(field.field_type, value) catch unreachable;
+                    }
+                }
+            }
+        }
+
+        self.active_row = self.active_row + 1;
+        return result;
     }
 
     pub fn deinit(self: Result) void {
@@ -157,14 +141,13 @@ pub const Pg = struct {
 
                         inline for (struct_fields) |field, index| {
 
-                            //Add data column values
-                            if (child_index == 0) {
-                                try builder.addColumn(field.name);
-                            }
+                            //Add first child struct keys as column values
+                            if (child_index == 0) try builder.addColumn(field.name);
 
                             const field_value = @field(child, field.name);
                             const field_type: type = field.field_type;
-                            //Add all values in array
+
+                            //Add the struct values in array
                             switch (field_type) {
 
                                 //Cast int to string
@@ -242,11 +225,12 @@ pub const Pg = struct {
 
     pub fn execValues(self: Self, comptime query: []const u8, values: anytype) !Result {
         var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        const allocator = &temp_memory.allocator;
-        var command = try std.fmt.allocPrint(allocator, query, values);
-
         defer temp_memory.deinit();
-        return self.exec(command);
+
+        const allocator = &temp_memory.allocator;
+
+        //Join values and query with allocPrint and exec the string
+        return self.exec(try std.fmt.allocPrint(allocator, query, values));
     }
 
     pub fn finish(self: *Self) void {

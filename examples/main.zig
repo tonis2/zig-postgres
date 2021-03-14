@@ -21,34 +21,41 @@ pub fn main() !void {
 
     _ = try db.exec(schema);
 
-    const data = &[_]Accounts{
+    try db.insert(&[_]Accounts{
         .{
-            .id = 4,
+            .id = 1,
             .balance = 5,
         },
         .{
-            .id = 5,
+            .id = 2,
             .balance = 5,
         },
         .{
-            .id = 6,
+            .id = 3,
             .balance = 7,
         },
-    };
-
+    });
     try db.insert(Accounts{
         .id = 4,
         .balance = 5,
     });
 
-    try db.insert(data);
-
-    _ = try db.execValues("INSERT INTO accounts (id, balance) VALUES ({}, {})", .{ 1, 2 });
+    // _ = try db.execValues("INSERT INTO accounts (id, balance) VALUES ({}, {})", .{ 1, 2 });
 
     var result = try db.exec("SELECT * FROM accounts");
 
+    var retrieved_data = std.ArrayList(Accounts).init(allocator);
+
+    while (result.parse(Accounts)) |data| {
+        print("data {d} \n", .{data.balance});
+    }
+
+    _ = try db.exec("DROP TABLE accounts");
+
     defer {
         db.finish();
+        result.deinit();
+        retrieved_data.deinit();
         std.debug.assert(!gpa.deinit());
     }
 }

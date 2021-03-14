@@ -1,9 +1,11 @@
-const print = std.debug.print;
 const std = @import("std");
+
+const print = std.debug.print;
 const ArrayList = std.ArrayList;
-const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
+
 const helpers = @import("./helpers.zig");
+const Error = @import("./definitions.zig").Error;
 
 pub const SQL = enum { Insert, Select, Delete, Update };
 
@@ -24,7 +26,9 @@ pub const Builder = struct {
             .Insert => {
                 _ = try builder.commands.writer().write("INSERT INTO ");
             },
-            else => {},
+            else => {
+                return Error.NotImplemented;
+            },
         }
         return builder;
     }
@@ -34,7 +38,9 @@ pub const Builder = struct {
             .Insert => {
                 _ = try self.commands.writer().write(table_name);
             },
-            else => {},
+            else => {
+                return Error.NotImplemented;
+            },
         }
     }
 
@@ -80,7 +86,9 @@ pub const Builder = struct {
                     }
                 }
             },
-            else => {},
+            else => {
+                return Error.NotImplemented;
+            },
         }
     }
 
