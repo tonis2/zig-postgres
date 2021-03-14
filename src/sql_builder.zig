@@ -7,8 +7,6 @@ const helpers = @import("./helpers.zig");
 
 pub const SQL = enum { Insert, Select, Delete, Update };
 
-const Value = struct { string: []const u8 };
-
 pub const Builder = struct {
     commands: ArrayList(u8),
     columns: ArrayList([]const u8),
