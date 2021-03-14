@@ -43,11 +43,9 @@ pub fn main() !void {
 
     try db.insert(data);
 
-    // var values = try db.queryBuilder(Accounts, .{ .name = "test" });
-    // try db.exec("INSERT INTO accounts (id, balance) VALUES (1, 1000), (2, 250);");
+    _ = try db.execValues("INSERT INTO accounts (id, balance) VALUES ({}, {})", .{ 1, 2 });
 
     var result = try db.exec("SELECT * FROM accounts");
-    // print("type {s} \n", .{result.getType(1)});
 
     defer {
         db.finish();

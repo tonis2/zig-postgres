@@ -135,9 +135,8 @@ pub const Pg = struct {
 
     pub fn insert(self: Self, comptime data: anytype) !void {
         var builder = try Builder.new(.Insert, self.allocator);
-        var temporary_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-
-        const allocator = &temporary_memory.allocator;
+        var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        const allocator = &temp_memory.allocator;
 
         const type_info = @typeInfo(@TypeOf(data));
 
@@ -150,8 +149,8 @@ pub const Pg = struct {
 
                         //Set table name as first items struct name.
                         if (child_index == 0) {
-                            const table_name = @typeName(@TypeOf(child));
-                            try builder.table(helpers.toLowerCase(table_name.len, table_name)[0..]);
+                            const struct_name = @typeName(@TypeOf(child));
+                            try builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
                         }
 
                         const struct_fields = @typeInfo(@TypeOf(child)).Struct.fields;
@@ -195,7 +194,6 @@ pub const Pg = struct {
                     try builder.addColumn(field.name);
 
                     switch (field_type) {
-                        //Cast int to string
                         u8, u16, u32, usize => {
                             try builder.addValue(try std.fmt.allocPrint(allocator, "{}", .{field_value}));
                         },
@@ -212,11 +210,11 @@ pub const Pg = struct {
         }
 
         try builder.end();
-        print("command {s} \n", .{builder.commands.items});
+
         //Exec command
-        // _ = try self.exec(command.items);
+        _ = try self.exec(builder.commands.items);
         defer {
-            temporary_memory.deinit();
+            temp_memory.deinit();
             builder.deinit();
         }
     }
@@ -240,6 +238,15 @@ pub const Pg = struct {
         } else {
             return Error.QueryFailure;
         }
+    }
+
+    pub fn execValues(self: Self, comptime query: []const u8, values: anytype) !Result {
+        var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        const allocator = &temp_memory.allocator;
+        var command = try std.fmt.allocPrint(allocator, query, values);
+
+        defer temp_memory.deinit();
+        return self.exec(command);
     }
 
     pub fn finish(self: *Self) void {
