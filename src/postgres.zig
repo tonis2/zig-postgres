@@ -135,6 +135,9 @@ pub const Pg = struct {
 
     pub fn insert(self: Self, comptime data: anytype) !void {
         var builder = try Builder.new(.Insert, self.allocator);
+        var temporary_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+
+        const allocator = &temporary_memory.allocator;
 
         const type_info = @typeInfo(@TypeOf(data));
 
@@ -148,25 +151,26 @@ pub const Pg = struct {
                         //Set table name as first items struct name.
                         if (child_index == 0) {
                             const table_name = @typeName(@TypeOf(child));
-                            try builder.useTable(helpers.toLowerCase(table_name.len, table_name)[0..]);
+                            try builder.table(helpers.toLowerCase(table_name.len, table_name)[0..]);
                         }
 
                         const struct_fields = @typeInfo(@TypeOf(child)).Struct.fields;
 
                         inline for (struct_fields) |field, index| {
-                            const field_value = @field(child, field.name);
-                            const field_type: type = field.field_type;
 
+                            //Add data column values
                             if (child_index == 0) {
                                 try builder.addColumn(field.name);
                             }
 
+                            const field_value = @field(child, field.name);
+                            const field_type: type = field.field_type;
+                            //Add all values in array
                             switch (field_type) {
+
                                 //Cast int to string
                                 u8, u16, u32, usize => {
-                                    var buffer: [200]u8 = undefined;
-                                    const str_value = try std.fmt.bufPrint(buffer[0..], "{d}", .{field_value});
-                                    try builder.addValue(str_value[0..]);
+                                    try builder.addValue(try std.fmt.allocPrint(allocator, "{}", .{field_value}));
                                 },
                                 []const u8 => {
                                     try builder.addValue(field_value);
@@ -183,7 +187,7 @@ pub const Pg = struct {
                 const struct_fields = @typeInfo(@TypeOf(data)).Struct.fields;
                 const struct_name = @typeName(@TypeOf(data));
 
-                try builder.useTable(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
+                try builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
                 inline for (struct_fields) |field, index| {
                     const field_value = @field(data, field.name);
                     const field_type: type = field.field_type;
@@ -193,9 +197,7 @@ pub const Pg = struct {
                     switch (field_type) {
                         //Cast int to string
                         u8, u16, u32, usize => {
-                            var buffer: [200]u8 = undefined;
-                            const str_value = try std.fmt.bufPrint(buffer[0..], "{d}", .{field_value});
-                            try builder.addValue(str_value[0..]);
+                            try builder.addValue(try std.fmt.allocPrint(allocator, "{}", .{field_value}));
                         },
                         []const u8 => {
                             try builder.addValue(field_value);
@@ -213,7 +215,10 @@ pub const Pg = struct {
         print("command {s} \n", .{builder.commands.items});
         //Exec command
         // _ = try self.exec(command.items);
-        defer builder.deinit();
+        defer {
+            temporary_memory.deinit();
+            builder.deinit();
+        }
     }
 
     pub fn exec(self: Self, query: []const u8) !Result {

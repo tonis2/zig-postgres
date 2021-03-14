@@ -1,10 +1,13 @@
 const print = std.debug.print;
 const std = @import("std");
 const ArrayList = std.ArrayList;
+const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
 const helpers = @import("./helpers.zig");
 
 pub const SQL = enum { Insert, Select, Delete, Update };
+
+const Value = struct { string: []const u8 };
 
 pub const Builder = struct {
     commands: ArrayList(u8),
@@ -28,7 +31,7 @@ pub const Builder = struct {
         return builder;
     }
 
-    pub fn useTable(self: *Builder, table_name: []const u8) !void {
+    pub fn table(self: *Builder, table_name: []const u8) !void {
         switch (self.build_type) {
             .Insert => {
                 _ = try self.commands.writer().write(table_name);
@@ -59,14 +62,23 @@ pub const Builder = struct {
                     }
                 }
                 _ = try self.commands.writer().write("VALUES");
+
                 for (self.values.items) |value, index| {
+                    const final_value = index == self.values.items.len - 1;
                     if (index == 0) _ = try self.commands.writer().write(" (");
-                    if (index == self.columns.items.len - 1) {
-                        _ = try self.commands.writer().write(value);
-                        _ = try self.commands.writer().write(");");
-                    } else {
-                        _ = try self.commands.writer().write(value);
+
+                    _ = try self.commands.writer().write(value);
+
+                    if (index % self.columns.items.len != 0 and !final_value) {
+                        _ = try self.commands.writer().write(")");
                         _ = try self.commands.writer().write(",");
+                        _ = try self.commands.writer().write("(");
+                    } else if (!final_value) {
+                        _ = try self.commands.writer().write(",");
+                    }
+                    if (final_value) {
+                        _ = try self.commands.writer().write(")");
+                        _ = try self.commands.writer().write(";");
                     }
                 }
             },
