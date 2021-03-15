@@ -17,4 +17,13 @@ pub fn build(b: *Builder) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    const tests = b.addTest("tests.zig");
+    tests.setBuildMode(mode);
+    tests.setTarget(target);
+    tests.linkSystemLibrary("c");
+    tests.linkSystemLibrary("pq");
+
+    const test_step = b.step("test", "Run tests");
+    test_step.dependOn(&tests.step);
 }

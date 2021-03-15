@@ -2,13 +2,13 @@ const std = @import("std");
 const c = @cImport({
     @cInclude("libpq-fe.h");
 });
+
 const helpers = @import("./helpers.zig");
 const Error = @import("./definitions.zig").Error;
 const ColumnType = @import("./definitions.zig").ColumnType;
 const Builder = @import("./sql_builder.zig").Builder;
 
 const print = std.debug.print;
-const ArrayList = std.ArrayList;
 
 pub const Result = struct {
     res: *c.PGresult,
@@ -27,12 +27,9 @@ pub const Result = struct {
         };
     }
 
-    fn columnName(self: Result, column_number: usize) ?[]const u8 {
-        const name = @as(?[*:0]const u8, c.PQfname(self.res, @intCast(c_int, column_number)));
-        if (name) |str| {
-            return str[0..std.mem.len(str)];
-        }
-        return null;
+    fn columnName(self: Result, column_number: usize) []const u8 {
+        const value = c.PQfname(self.res, @intCast(c_int, column_number));
+        return @as([*c]const u8, value)[0..std.mem.len(value)];
     }
 
     fn getType(self: Result, column_number: usize) ColumnType {
@@ -41,20 +38,13 @@ pub const Result = struct {
     }
 
     fn getValue(self: Result, row_number: usize, column_number: usize) []const u8 {
-        const value = @as(?[*:0]const u8, c.PQgetvalue(self.res, @intCast(c_int, row_number), @intCast(c_int, column_number)));
-        if (value) |str| {
-            return str[0..std.mem.len(str)];
-        }
-        return "";
+        const value = c.PQgetvalue(self.res, @intCast(c_int, row_number), @intCast(c_int, column_number));
+        return @as([*c]const u8, value)[0..std.mem.len(value)];
     }
 
     pub fn parse(self: *Result, comptime returnType: type) ?returnType {
         if (self.rows < 1) return null;
-        if (self.active_row == self.rows) {
-            //All rows returned
-            self.deinit();
-            return null;
-        }
+        if (self.active_row == self.rows) return null;
 
         const type_info = @typeInfo(returnType);
         if (type_info != .Struct) {
@@ -70,19 +60,18 @@ pub const Result = struct {
         while (col_id < self.columns) : (col_id += 1) {
             const column_name = self.columnName(col_id);
             const column_type = self.getType(col_id);
+            const value = self.getValue(self.active_row, col_id);
 
-            if (column_name) |name| {
-                const value = self.getValue(self.active_row, col_id);
-
-                inline for (struct_fields) |field| {
-                    if (std.mem.eql(u8, field.name, name)) {
-                        @field(result, field.name) = column_type.castValue(field.field_type, value) catch unreachable;
-                    }
+            inline for (struct_fields) |field| {
+                if (std.mem.eql(u8, field.name, column_name)) {
+                    print("type {d} \n", .{field.field_type});
+                    // @field(result, field.name) = column_type.castValue(field.field_type, value) catch unreachable;
                 }
             }
         }
 
         self.active_row = self.active_row + 1;
+        if (self.active_row == self.rows) self.deinit();
         return result;
     }
 
@@ -152,10 +141,10 @@ pub const Pg = struct {
 
                                 //Cast int to string
                                 u8, u16, u32, usize => {
-                                    try builder.addValue(try std.fmt.allocPrint(allocator, "{}", .{field_value}));
+                                    try builder.addValue(try std.fmt.allocPrint(allocator, "{d}", .{field_value}));
                                 },
                                 []const u8 => {
-                                    try builder.addValue(field_value);
+                                    try builder.addValue(try std.fmt.allocPrint(allocator, "'{s}'", .{field_value}));
                                 },
                                 else => {
                                     //Todo other types
@@ -178,10 +167,10 @@ pub const Pg = struct {
 
                     switch (field_type) {
                         u8, u16, u32, usize => {
-                            try builder.addValue(try std.fmt.allocPrint(allocator, "{}", .{field_value}));
+                            try builder.addValue(try std.fmt.allocPrint(allocator, "{d}", .{field_value}));
                         },
                         []const u8 => {
-                            try builder.addValue(field_value);
+                            try builder.addValue(try std.fmt.allocPrint(allocator, "'{s}'", .{field_value}));
                         },
                         else => {
                             //Todo other types
@@ -193,7 +182,7 @@ pub const Pg = struct {
         }
 
         try builder.end();
-
+  
         //Exec command
         _ = try self.exec(builder.commands.items);
         defer {
@@ -210,7 +199,6 @@ pub const Pg = struct {
         var response_code = @enumToInt(c.PQresultStatus(res));
 
         if (response_code != c.PGRES_TUPLES_OK and response_code != c.PGRES_COMMAND_OK and response_code != c.PGRES_NONFATAL_ERROR) {
-            var msg = c.PQresultErrorMessage(res);
             std.debug.warn("Error {s}\n", .{c.PQresultErrorMessage(res)});
             c.PQclear(res);
             return Error.QueryFailure;
@@ -229,7 +217,7 @@ pub const Pg = struct {
 
         const allocator = &temp_memory.allocator;
 
-        //Join values and query with allocPrint and exec the string
+        //Join values and query with allocPrint and then exec the string
         return self.exec(try std.fmt.allocPrint(allocator, query, values));
     }
 
@@ -237,3 +225,36 @@ pub const Pg = struct {
         c.PQfinish(self.connection);
     }
 };
+
+const testing = std.testing;
+
+test "database" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = &gpa.allocator;
+    defer std.debug.assert(!gpa.deinit());
+
+    const Users = struct {
+        id: u16,
+        name: []const u8,
+        age: u16,
+    };
+
+    var db = try Pg.connect(allocator, "postgresql://root@tonis-xps:26257?sslmode=disable");
+
+    const schema =
+        \\CREATE DATABASE IF NOT EXISTS root;
+        \\CREATE TABLE IF NOT EXISTS users (id INT, name TEXT, age INT);
+    ;
+
+    _ = try db.exec(schema);
+
+    try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
+
+    var result = try db.execValues("SELECT * FROM users WHERE name = {}", .{"Charlie"});
+
+    const user = result.parse(Users).?;
+
+    testing.expectEqual(user.id, 1);
+
+    _ = try db.exec("DROP TABLE users");
+}
