@@ -7,6 +7,7 @@ const helpers = @import("./helpers.zig");
 const Error = @import("./definitions.zig").Error;
 const ColumnType = @import("./definitions.zig").ColumnType;
 const Builder = @import("./sql_builder.zig").Builder;
+const Allocator = std.mem.Allocator;
 
 const print = std.debug.print;
 
@@ -224,13 +225,11 @@ pub const Pg = struct {
         }
     }
 
-    fn createTempStruct(comptime base_struct: std.builtin.TypeInfo.Struct, values: anytype) !type {
-        var temp_field: std.builtin.TypeInfo.StructField = undefined;
-        var temp_fields: [base_struct.fields.len]std.builtin.TypeInfo.StructField = undefined;
-        var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        defer temp_memory.deinit();
+    fn parse_values(values: anytype, comptime query: []const u8, allocator: *Allocator) ![]const u8 {
+        const base_struct = @typeInfo(@TypeOf(values)).Struct;
 
-        var allocator = &temp_memory.allocator;
+        comptime var temp_field: std.builtin.TypeInfo.StructField = undefined;
+        comptime var temp_fields: [base_struct.fields.len]std.builtin.TypeInfo.StructField = undefined;
 
         inline for (base_struct.fields) |field, index| {
             const value = @field(values, field.name);
@@ -244,7 +243,7 @@ pub const Pg = struct {
             };
         }
 
-        return @Type(std.builtin.TypeInfo{
+        comptime const temp_type = @Type(std.builtin.TypeInfo{
             .Struct = std.builtin.TypeInfo.Struct{
                 .is_tuple = false,
                 .layout = .Auto,
@@ -252,6 +251,8 @@ pub const Pg = struct {
                 .fields = &temp_fields,
             },
         });
+
+        return try std.fmt.allocPrint(allocator, query, temp_type{});
     }
 
     pub fn execValues(self: Self, comptime query: []const u8, values: anytype) !Result {
@@ -259,12 +260,10 @@ pub const Pg = struct {
         defer temp_memory.deinit();
 
         const allocator = &temp_memory.allocator;
-
-        const value_fields = @typeInfo(@TypeOf(values)).Struct;
-        const temp_data = try createTempStruct(value_fields, values);
+        const command = try parse_values(values, query, allocator);
 
         // Join values and query with allocPrint and then exec the string
-        return self.exec(try std.fmt.allocPrint(allocator, query, temp_data{}));
+        return self.exec(command);
     }
 
     pub fn finish(self: *Self) void {
