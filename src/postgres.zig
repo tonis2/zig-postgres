@@ -29,7 +29,7 @@ pub const Result = struct {
 
     fn columnName(self: Result, column_number: usize) []const u8 {
         const value = c.PQfname(self.res, @intCast(c_int, column_number));
-        return @as([*c]const u8, value)[0..std.mem.len(value)];
+        return @as([*:0]const u8, value)[0..std.mem.len(value)];
     }
 
     fn getType(self: Result, column_number: usize) ColumnType {
@@ -39,7 +39,7 @@ pub const Result = struct {
 
     fn getValue(self: Result, row_number: usize, column_number: usize) []const u8 {
         const value = c.PQgetvalue(self.res, @intCast(c_int, row_number), @intCast(c_int, column_number));
-        return @as([*c]const u8, value)[0..std.mem.len(value)];
+        return @as([*:0]const u8, value)[0..std.mem.len(value)];
     }
 
     pub fn parse(self: *Result, comptime returnType: type) ?returnType {
@@ -47,6 +47,7 @@ pub const Result = struct {
         if (self.active_row == self.rows) return null;
 
         const type_info = @typeInfo(returnType);
+
         if (type_info != .Struct) {
             @compileError("Need to use struct as parser type");
         }
@@ -60,12 +61,24 @@ pub const Result = struct {
         while (col_id < self.columns) : (col_id += 1) {
             const column_name = self.columnName(col_id);
             const column_type = self.getType(col_id);
-            const value = self.getValue(self.active_row, col_id);
+            const value: []const u8 = self.getValue(self.active_row, col_id);
 
             inline for (struct_fields) |field| {
                 if (std.mem.eql(u8, field.name, column_name)) {
-                    print("type {d} \n", .{field.field_type});
-                    // @field(result, field.name) = column_type.castValue(field.field_type, value) catch unreachable;
+                    switch (field.field_type) {
+                        u8, u16, u32, usize => {
+                            if (column_type == .Int4 or column_type == .Int8) {
+                                @compileError("struct expects unsigned int but database returns signed int");
+                            }
+                        },
+                        i16, i32 => {
+                            @field(result, field.name) = std.fmt.parseInt(field.field_type, value, 10) catch unreachable;
+                        },
+                        []const u8 => {
+                            @field(result, field.name) = value;
+                        },
+                        else => {},
+                    }
                 }
             }
         }
@@ -140,7 +153,7 @@ pub const Pg = struct {
                             switch (field_type) {
 
                                 //Cast int to string
-                                u8, u16, u32, usize => {
+                                i16, i32, u8, u16, u32, usize => {
                                     try builder.addValue(try std.fmt.allocPrint(allocator, "{d}", .{field_value}));
                                 },
                                 []const u8 => {
@@ -166,7 +179,7 @@ pub const Pg = struct {
                     try builder.addColumn(field.name);
 
                     switch (field_type) {
-                        u8, u16, u32, usize => {
+                        i16, i32, u8, u16, u32, usize => {
                             try builder.addValue(try std.fmt.allocPrint(allocator, "{d}", .{field_value}));
                         },
                         []const u8 => {
@@ -182,7 +195,7 @@ pub const Pg = struct {
         }
 
         try builder.end();
-  
+
         //Exec command
         _ = try self.exec(builder.commands.items);
         defer {
@@ -211,14 +224,47 @@ pub const Pg = struct {
         }
     }
 
+    fn createTempStruct(comptime base_struct: std.builtin.TypeInfo.Struct, values: anytype) !type {
+        var temp_field: std.builtin.TypeInfo.StructField = undefined;
+        var temp_fields: [base_struct.fields.len]std.builtin.TypeInfo.StructField = undefined;
+        var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer temp_memory.deinit();
+
+        var allocator = &temp_memory.allocator;
+
+        inline for (base_struct.fields) |field, index| {
+            const value = @field(values, field.name);
+
+            temp_fields[index] = std.builtin.TypeInfo.StructField{
+                .name = field.name,
+                .field_type = *const [std.mem.len(value) + 2:0]u8,
+                .default_value = "'" ++ value ++ "'",
+                .is_comptime = false,
+                .alignment = if (@sizeOf(field.field_type) > 0) @alignOf(field.field_type) else 0,
+            };
+        }
+
+        return @Type(std.builtin.TypeInfo{
+            .Struct = std.builtin.TypeInfo.Struct{
+                .is_tuple = false,
+                .layout = .Auto,
+                .decls = &[_]std.builtin.TypeInfo.Declaration{},
+                .fields = &temp_fields,
+            },
+        });
+    }
+
     pub fn execValues(self: Self, comptime query: []const u8, values: anytype) !Result {
         var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer temp_memory.deinit();
 
         const allocator = &temp_memory.allocator;
 
-        //Join values and query with allocPrint and then exec the string
-        return self.exec(try std.fmt.allocPrint(allocator, query, values));
+        const value_fields = @typeInfo(@TypeOf(values)).Struct;
+        const temp_data = try createTempStruct(value_fields, values);
+
+        // Join values and query with allocPrint and then exec the string
+        return self.exec(try std.fmt.allocPrint(allocator, query, temp_data{}));
     }
 
     pub fn finish(self: *Self) void {
@@ -234,9 +280,9 @@ test "database" {
     defer std.debug.assert(!gpa.deinit());
 
     const Users = struct {
-        id: u16,
+        id: i16,
         name: []const u8,
-        age: u16,
+        age: i16,
     };
 
     var db = try Pg.connect(allocator, "postgresql://root@tonis-xps:26257?sslmode=disable");
@@ -249,12 +295,16 @@ test "database" {
     _ = try db.exec(schema);
 
     try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
+    try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
 
-    var result = try db.execValues("SELECT * FROM users WHERE name = {}", .{"Charlie"});
+    var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
+
+    testing.expectEqual(result.rows, 1);
 
     const user = result.parse(Users).?;
 
     testing.expectEqual(user.id, 1);
+    testing.expectEqualStrings(user.name, "Charlie");
 
     _ = try db.exec("DROP TABLE users");
 }

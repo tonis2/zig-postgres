@@ -7,12 +7,12 @@ var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = &gpa.allocator;
 
 pub fn main() !void {
-    // defer std.debug.assert(!gpa.deinit());
+    defer std.debug.assert(!gpa.deinit());
 
     const Users = struct {
-        id: u16,
+        id: i16,
         name: []const u8,
-        age: u16,
+        age: i16,
     };
 
     var db = try Pg.connect(allocator, "postgresql://root@tonis-xps:26257?sslmode=disable");
@@ -26,11 +26,12 @@ pub fn main() !void {
 
     try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
 
-    var result = try db.execValues("SELECT * FROM users", .{});
+    var result = try db.execValues("SELECT * FROM users WHERE name= {s}", .{"Charlie"});
 
     const user = result.parse(Users).?;
 
     print("{d} \n", .{user.id});
+    print("{s} \n", .{user.name});
 
     _ = try db.exec("DROP TABLE users");
 }
