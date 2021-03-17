@@ -8,6 +8,7 @@ const Error = @import("./definitions.zig").Error;
 const ColumnType = @import("./definitions.zig").ColumnType;
 const Builder = @import("./sql_builder.zig").Builder;
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 
 const print = std.debug.print;
 
@@ -225,34 +226,40 @@ pub const Pg = struct {
         }
     }
 
-    fn parse_values(values: anytype, comptime query: []const u8, allocator: *Allocator) ![]const u8 {
-        const base_struct = @typeInfo(@TypeOf(values)).Struct;
+    // Need to change the values to strings orelse PG doesen't want them.
+    fn changeValues(values: anytype, comptime query: []const u8, allocator: *Allocator) ![]const u8 {
+        comptime var values_info = @typeInfo(@TypeOf(values));
+        comptime var temp_fields: [values_info.Struct.fields.len]std.builtin.TypeInfo.StructField = undefined;
 
-        comptime var temp_field: std.builtin.TypeInfo.StructField = undefined;
-        comptime var temp_fields: [base_struct.fields.len]std.builtin.TypeInfo.StructField = undefined;
-
-        inline for (base_struct.fields) |field, index| {
+        inline for (values_info.Struct.fields) |field, index| {
             const value = @field(values, field.name);
+            const field_type = @TypeOf(value);
 
-            temp_fields[index] = std.builtin.TypeInfo.StructField{
-                .name = field.name,
-                .field_type = *const [std.mem.len(value) + 2:0]u8,
-                .default_value = "'" ++ value ++ "'",
-                .is_comptime = false,
-                .alignment = if (@sizeOf(field.field_type) > 0) @alignOf(field.field_type) else 0,
-            };
+            switch (field_type) {
+                comptime_int => {
+                    temp_fields[index] = std.builtin.TypeInfo.StructField{
+                        .name = field.name,
+                        .field_type = i32,
+                        .default_value = @intCast(i32, value),
+                        .is_comptime = false,
+                        .alignment = 0,
+                    };
+                },
+                else => {
+                    temp_fields[index] = std.builtin.TypeInfo.StructField{
+                        .name = field.name,
+                        .field_type = *const [std.mem.len(value) + 2:0]u8,
+                        .default_value = "'" ++ value ++ "'",
+                        .is_comptime = false,
+                        .alignment = if (@sizeOf(field.field_type) > 0) @alignOf(field.field_type) else 0,
+                    };
+                },
+            }
         }
 
-        comptime const temp_type = @Type(std.builtin.TypeInfo{
-            .Struct = std.builtin.TypeInfo.Struct{
-                .is_tuple = false,
-                .layout = .Auto,
-                .decls = &[_]std.builtin.TypeInfo.Declaration{},
-                .fields = &temp_fields,
-            },
-        });
+        values_info.Struct.fields = &temp_fields;
 
-        return try std.fmt.allocPrint(allocator, query, temp_type{});
+        return try std.fmt.allocPrint(allocator, query, @Type(values_info){});
     }
 
     pub fn execValues(self: Self, comptime query: []const u8, values: anytype) !Result {
@@ -260,7 +267,7 @@ pub const Pg = struct {
         defer temp_memory.deinit();
 
         const allocator = &temp_memory.allocator;
-        const command = try parse_values(values, query, allocator);
+        const command = try changeValues(values, query, allocator);
 
         // Join values and query with allocPrint and then exec the string
         return self.exec(command);
@@ -276,7 +283,6 @@ const testing = std.testing;
 test "database" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = &gpa.allocator;
-    defer std.debug.assert(!gpa.deinit());
 
     const Users = struct {
         id: i16,
@@ -297,13 +303,25 @@ test "database" {
     try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
 
     var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
+    var result2 = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
+
+    var user = result.parse(Users).?;
+    var user2 = result2.parse(Users).?;
 
     testing.expectEqual(result.rows, 1);
-
-    const user = result.parse(Users).?;
 
     testing.expectEqual(user.id, 1);
     testing.expectEqualStrings(user.name, "Charlie");
 
+    testing.expectEqual(user2.id, 2);
+    testing.expectEqualStrings(user2.name, "Steve");
+
     _ = try db.exec("DROP TABLE users");
+
+    errdefer {
+        _ = try db.exec("DROP TABLE users");
+    }
+    defer {
+        std.debug.assert(!gpa.deinit());
+    }
 }

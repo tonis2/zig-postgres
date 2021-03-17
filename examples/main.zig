@@ -7,8 +7,6 @@ var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = &gpa.allocator;
 
 pub fn main() !void {
-    defer std.debug.assert(!gpa.deinit());
-
     const Users = struct {
         id: i16,
         name: []const u8,
@@ -25,13 +23,22 @@ pub fn main() !void {
     _ = try db.exec(schema);
 
     try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
+    try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
 
-    var result = try db.execValues("SELECT * FROM users WHERE name= {s}", .{"Charlie"});
+    var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
+    var result2 = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
 
-    const user = result.parse(Users).?;
-
+    var user = result.parse(Users).?;
+    var user2 = result2.parse(Users).?;
+    print("{d} \n", .{result.rows});
     print("{d} \n", .{user.id});
     print("{s} \n", .{user.name});
 
+    print("{d} \n", .{user2.id});
+    print("{s} \n", .{user2.name});
     _ = try db.exec("DROP TABLE users");
+
+    defer {
+        std.debug.assert(!gpa.deinit());
+    }
 }
