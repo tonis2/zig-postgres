@@ -11,8 +11,10 @@ This is tested with zig `0.8`
 
 -----
 
+Add this repository as submodule `git submodule add git@github.com:tonis2/zig-postgres.git /dependencies`
 
-Clone this repository into your ziglang project `/dependencies` folder, and add the following lines into your project `build.zig`
+
+Add following code lines into your project `build.zig`
 
 
 This code adds the package and links required libraries.
