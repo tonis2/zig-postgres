@@ -110,7 +110,7 @@ while (results.parse(Users)) |user| {
 
 ```zig
 var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
-var user = result.parse(Users).?;
+var user = result.parse(Users);
 
 if(user) print("{s} \n", .{user.name});
 ```
