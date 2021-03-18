@@ -34,7 +34,7 @@ This code adds the package and links required libraries.
 ### Connecting to database
 
 
-```
+```zig
     const Pg = @import("postgres").Pg;
 
     var db = try Pg.connect(allocator, "postgresql://root@postgresURL:26257?sslmode=disable");
@@ -43,7 +43,7 @@ This code adds the package and links required libraries.
 
 ### Executing SQL
 
-```
+```zig
    const schema =
         \\CREATE DATABASE IF NOT EXISTS root;
         \\CREATE TABLE IF NOT EXISTS users (id INT, name TEXT, age INT);
@@ -60,7 +60,7 @@ This code adds the package and links required libraries.
 
 Be mindful that this query, uses `struct name` as lowercase letters for `table` name.
 
-```
+```zig
   const Users = struct {
         id: i16,
         name: []const u8,
@@ -76,7 +76,7 @@ Be mindful that this query, uses `struct name` as lowercase letters for `table` 
 
 ### Exec query with values
 
-```
+```zig
 try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
 
 _ = try db.execValues("INSERT INTO users (id, name, age) VALUES ({d}, {s}, {d})", .{ 5, "Tom", 32 });
@@ -86,7 +86,7 @@ _ = try db.execValues("INSERT INTO users (id, name, age) VALUES ({d}, {s}, {d})"
 
 ### Read query results
 
-```
+```zig
 var result = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
 var user = result.parse(Users).?;
 
@@ -96,7 +96,7 @@ print("{s} \n", .{user.name});
 ```
 
 
-```
+```zig
 var results = try db.execValues("SELECT * FROM users WHERE age = {d}", .{25});
 
 while (results.parse(Users)) |user| {
@@ -104,7 +104,7 @@ while (results.parse(Users)) |user| {
 }
 ```
 
-```
+```zig
 var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
 var user = result.parse(Users).?;
 
