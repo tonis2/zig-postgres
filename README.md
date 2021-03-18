@@ -37,6 +37,10 @@ This code adds the package and links required libraries.
 ```zig
     const Pg = @import("postgres").Pg;
 
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = &gpa.allocator;
+    defer std.debug.assert(!gpa.deinit());
+
     var db = try Pg.connect(allocator, "postgresql://root@postgresURL:26257?sslmode=disable");
 
 ```
