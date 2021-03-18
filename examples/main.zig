@@ -24,18 +24,24 @@ pub fn main() !void {
 
     try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
     try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
+    try db.insert(Users{ .id = 3, .name = "Karl", .age = 25 });
 
     var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
     var result2 = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
+    var result3 = try db.execValues("SELECT * FROM users WHERE age = {d}", .{25});
+
+    while (result3.parse(Users)) |user| {
+        print("{s} \n", .{user.name});
+    }
 
     var user = result.parse(Users).?;
     var user2 = result2.parse(Users).?;
-    print("{d} \n", .{result.rows});
-    print("{d} \n", .{user.id});
-    print("{s} \n", .{user.name});
+    // print("{d} \n", .{result.rows});
+    // print("{d} \n", .{user.id});
+    // print("{s} \n", .{user.name});
 
-    print("{d} \n", .{user2.id});
-    print("{s} \n", .{user2.name});
+    // print("{d} \n", .{user2.id});
+    // print("{s} \n", .{user2.name});
     _ = try db.exec("DROP TABLE users");
 
     defer {

@@ -283,6 +283,7 @@ const testing = std.testing;
 test "database" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = &gpa.allocator;
+    defer std.debug.assert(!gpa.deinit());
 
     const Users = struct {
         id: i16,
@@ -301,14 +302,18 @@ test "database" {
 
     try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
     try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
+    try db.insert(Users{ .id = 3, .name = "Tom", .age = 25 });
 
     var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
     var result2 = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
+    var result3 = try db.execValues("SELECT * FROM users WHERE age = {d}", .{25});
 
     var user = result.parse(Users).?;
     var user2 = result2.parse(Users).?;
 
     testing.expectEqual(result.rows, 1);
+    testing.expectEqual(result2.rows, 1);
+    testing.expectEqual(result3.rows, 2);
 
     testing.expectEqual(user.id, 1);
     testing.expectEqualStrings(user.name, "Charlie");
@@ -316,12 +321,7 @@ test "database" {
     testing.expectEqual(user2.id, 2);
     testing.expectEqualStrings(user2.name, "Steve");
 
-    _ = try db.exec("DROP TABLE users");
+    while (result3.parse(Users)) |data| testing.expectEqual(data.age, 25);
 
-    errdefer {
-        _ = try db.exec("DROP TABLE users");
-    }
-    defer {
-        std.debug.assert(!gpa.deinit());
-    }
+    _ = try db.exec("DROP TABLE users");
 }
