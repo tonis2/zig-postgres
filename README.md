@@ -1,7 +1,7 @@
 # zig-postgres
 
 
-Light wrapper around Postgres `libpq-fe` C-lib
+Light wrapper around Postgres `libpq-fe`
 
 This is tested with zig `0.8`
 
