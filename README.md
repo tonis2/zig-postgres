@@ -3,6 +3,8 @@
 
 Light wrapper around Postgres `libpq-fe` C-lib
 
+This is tested with zig `0.8`
+
 
 
 ## How to install 
