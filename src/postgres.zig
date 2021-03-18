@@ -31,7 +31,7 @@ pub const Result = struct {
 
     fn columnName(self: Result, column_number: usize) []const u8 {
         const value = c.PQfname(self.res, @intCast(c_int, column_number));
-        return @as([*:0]const u8, value)[0..std.mem.len(value)];
+        return @as([*c]const u8, value)[0..std.mem.len(value)];
     }
 
     fn getType(self: Result, column_number: usize) ColumnType {
@@ -41,7 +41,7 @@ pub const Result = struct {
 
     fn getValue(self: Result, row_number: usize, column_number: usize) []const u8 {
         const value = c.PQgetvalue(self.res, @intCast(c_int, row_number), @intCast(c_int, column_number));
-        return @as([*:0]const u8, value)[0..std.mem.len(value)];
+        return @as([*c]const u8, value)[0..std.mem.len(value)];
     }
 
     pub fn parse(self: *Result, comptime returnType: type) ?returnType {
@@ -58,7 +58,6 @@ pub const Result = struct {
 
         var result: returnType = undefined;
 
-        //Lets loop thgrough all the columns and return active_row as a struct
         var col_id: usize = 0;
         while (col_id < self.columns) : (col_id += 1) {
             const column_name = self.columnName(col_id);
@@ -227,7 +226,7 @@ pub const Pg = struct {
     }
 
     // Need to change the values to strings orelse PG doesen't want them.
-    fn changeValues(values: anytype, comptime query: []const u8, allocator: *Allocator) ![]const u8 {
+    fn parseValues(values: anytype, comptime query: []const u8, allocator: *Allocator) ![]const u8 {
         comptime var values_info = @typeInfo(@TypeOf(values));
         comptime var temp_fields: [values_info.Struct.fields.len]std.builtin.TypeInfo.StructField = undefined;
 
@@ -242,7 +241,7 @@ pub const Pg = struct {
                         .field_type = i32,
                         .default_value = @intCast(i32, value),
                         .is_comptime = false,
-                        .alignment = 0,
+                        .alignment = if (@sizeOf(field.field_type) > 0) @alignOf(field.field_type) else 0,
                     };
                 },
                 else => {
@@ -267,9 +266,8 @@ pub const Pg = struct {
         defer temp_memory.deinit();
 
         const allocator = &temp_memory.allocator;
-        const command = try changeValues(values, query, allocator);
+        const command = try parseValues(values, query, allocator);
 
-        // Join values and query with allocPrint and then exec the string
         return self.exec(command);
     }
 
