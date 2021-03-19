@@ -11,7 +11,7 @@ This is tested with zig `0.8`
 
 -----
 
-Add this repository as submodule `git submodule add git@github.com:tonis2/zig-postgres.git /dependencies`
+Add this repository as submodule `git submodule add git@github.com:tonis2/zig-postgres.git /dependencies/zig-postgres`
 
 
 Add following code lines into your project `build.zig`
