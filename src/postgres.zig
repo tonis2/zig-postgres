@@ -3,10 +3,11 @@ const c = @cImport({
     @cInclude("libpq-fe.h");
 });
 
+pub const Builder = @import("./sql_builder.zig").Builder;
+
 const helpers = @import("./helpers.zig");
 const Error = @import("./definitions.zig").Error;
 const ColumnType = @import("./definitions.zig").ColumnType;
-const Builder = @import("./sql_builder.zig").Builder;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
@@ -320,6 +321,16 @@ test "database" {
     testing.expectEqualStrings(user2.name, "Steve");
 
     while (result3.parse(Users)) |data| testing.expectEqual(data.age, 25);
+
+    try db.insert(&[_]Users{
+        Users{ .id = 4, .name = "Tony", .age = 33 },
+        Users{ .id = 5, .name = "Sara", .age = 33 },
+        Users{ .id = 6, .name = "Tony", .age = 33 },
+    });
+
+    var result4 = try db.execValues("SELECT * FROM users WHERE age = {d}", .{33});
+
+    testing.expectEqual(result4.rows, 3);
 
     _ = try db.exec("DROP TABLE users");
 }

@@ -7,6 +7,13 @@ This is tested with zig `0.8`
 
 
 
+Installing `libpg` on debian linux
+
+
+`sudo apt-get install libpq-dev`
+
+
+
 ## How to install 
 
 -----
@@ -24,7 +31,7 @@ This code adds the package and links required libraries.
 ```zig
     exe.addPackage(.{ .name = "postgres", .path = "/dependencies/zig-postgres/src/postgres.zig" });
     exe.linkSystemLibrary("c");
-    exe.linkSystemLibrary("pq");
+    exe.linkSystemLibrary("libpq");
 ```
 
 ## How to use
@@ -59,8 +66,6 @@ This code adds the package and links required libraries.
 ```
 
 
-
-
 ### Inserting data
 
 
@@ -76,6 +81,13 @@ Be mindful that this query, uses `struct name` as lowercase letters for `table` 
   try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
   try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
   try db.insert(Users{ .id = 3, .name = "Karl", .age = 25 });
+
+
+  try db.insert(&[_]Users{
+     Users{ .id = 4, .name = "Tony", .age = 25 },
+     Users{ .id = 5, .name = "Sara", .age = 32 },
+     Users{ .id = 6, .name = "Fred", .age = 11 },
+  });
 
 ```
 

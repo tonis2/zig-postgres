@@ -25,6 +25,13 @@ pub fn main() !void {
     try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
     try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
     try db.insert(Users{ .id = 3, .name = "Karl", .age = 25 });
+
+    try db.insert(&[_]Users{
+        Users{ .id = 4, .name = "Tony", .age = 25 },
+        Users{ .id = 5, .name = "Sara", .age = 32 },
+        Users{ .id = 6, .name = "Fred", .age = 11 },
+    });
+
     _ = try db.execValues("INSERT INTO users (id, name, age) VALUES ({d}, {s}, {d})", .{ 5, "Tom", 32 });
 
     var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});

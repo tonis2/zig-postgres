@@ -78,7 +78,7 @@ pub const Builder = struct {
 
                     _ = try self.commands.writer().write(value);
 
-                    if (!final_value and (index + 1 % self.columns.items.len != self.columns.items.len)) {
+                    if (!final_value and columns_mod != self.columns.items.len - 1) {
                         _ = try self.commands.writer().write(",");
                     }
 
@@ -137,9 +137,13 @@ test "database" {
     try builder2.addValue("1");
     try builder2.addValue("Test2");
     try builder2.addValue("53");
+
+    try builder2.addValue("3");
+    try builder2.addValue("Test3");
+    try builder2.addValue("53");
     try builder2.end();
 
-    testing.expectEqualStrings("INSERT INTO test (id,name,age) VALUES (5,Test,3),(1,Test2,53);", builder2.command());
+    testing.expectEqualStrings("INSERT INTO test (id,name,age) VALUES (5,Test,3),(1,Test2,53),(3,Test3,53);", builder2.command());
 
     defer {
         builder.deinit();

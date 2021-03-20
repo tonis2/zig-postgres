@@ -7,9 +7,11 @@ pub fn build(b: *Builder) void {
     const exe = b.addExecutable("main", "examples/main.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
+
     exe.addPackagePath("postgres", "src/postgres.zig");
     exe.linkSystemLibrary("c");
-    exe.linkSystemLibrary("pq");
+    exe.linkSystemLibrary("libpq");
+
     exe.install();
 
     const run_cmd = exe.run();
@@ -22,7 +24,7 @@ pub fn build(b: *Builder) void {
     tests.setBuildMode(mode);
     tests.setTarget(target);
     tests.linkSystemLibrary("c");
-    tests.linkSystemLibrary("pq");
+    tests.linkSystemLibrary("libpq");
 
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&tests.step);
