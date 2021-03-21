@@ -1,7 +1,7 @@
 # zig-postgres
 
 
-Light bindings around Postgres `libpq-fe`
+Light bindings around Postgres `libpq`
 
 This is tested with zig `0.8`
 
