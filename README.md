@@ -20,7 +20,7 @@ Installing `libpg` on debian linux
 
 Add this repository as submodule 
 
-`git submodule add git@github.com:tonis2/zig-postgres.git /dependencies/zig-postgres`
+`git submodule add git@github.com:tonis2/zig-postgres.git dependencies/zig-postgres`
 
 
 Add following code lines into your project `build.zig`
