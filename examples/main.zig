@@ -22,7 +22,9 @@ pub fn main() !void {
 
     _ = try db.exec(schema);
 
-    try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
+    var data = Users{ .id = 1, .name = "Charlie", .age = 20 };
+
+    try db.insert(data);
     try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
     try db.insert(Users{ .id = 3, .name = "Karl", .age = 25 });
 

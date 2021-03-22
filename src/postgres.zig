@@ -121,7 +121,7 @@ pub const Pg = struct {
         };
     }
 
-    pub fn insert(self: Self, comptime data: anytype) !void {
+    pub fn insert(self: Self, data: anytype) !void {
         var builder = try Builder.new(.Insert, self.allocator);
         var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         const allocator = &temp_memory.allocator;
