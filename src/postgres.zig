@@ -226,7 +226,6 @@ pub const Pg = struct {
         }
     }
 
-    // Need to change the values to strings orelse PG doesen't want them.
     fn parseValues(values: anytype, comptime query: []const u8, allocator: *Allocator) ![]const u8 {
         comptime var values_info = @typeInfo(@TypeOf(values));
         comptime var temp_fields: [values_info.Struct.fields.len]std.builtin.TypeInfo.StructField = undefined;
