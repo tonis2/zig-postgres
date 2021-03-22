@@ -1,7 +1,7 @@
 # zig-postgres
 
 
-Light bindings around Postgres `libpq-fe`
+Light bindings around Postgres `libpq`
 
 This is tested with zig `0.8`
 
@@ -20,7 +20,7 @@ Installing `libpg` on debian linux
 
 Add this repository as submodule 
 
-`git submodule add git@github.com:tonis2/zig-postgres.git /dependencies/zig-postgres`
+`git submodule add git@github.com:tonis2/zig-postgres.git dependencies/zig-postgres`
 
 
 Add following code lines into your project `build.zig`
@@ -130,4 +130,4 @@ if(user) print("{s} \n", .{user.name});
 ```
 
 
-Many thanks for this [library](https://github.com/aeronavery/zig-orm)
+
