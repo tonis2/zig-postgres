@@ -68,15 +68,25 @@ pub const Result = struct {
             inline for (struct_fields) |field| {
                 if (std.mem.eql(u8, field.name, column_name)) {
                     switch (field.field_type) {
-                        u8, u16, u32, usize => {
-                            if (column_type == .Int4 or column_type == .Int8) {
-                                @compileError("struct expects unsigned int but database returns signed int");
-                            }
+                        ?u8,
+                        ?u16,
+                        ?u32,
+                        => {
+                            @field(result, field.name) = std.fmt.parseUnsigned(@typeInfo(field.field_type).Optional.child, value, 10) catch unreachable;
                         },
-                        i16, i32 => {
+                        u8, u16, u32, usize => {
+                            @field(result, field.name) = std.fmt.parseUnsigned(field.field_type, value, 10) catch unreachable;
+                        },
+                        ?i8,
+                        ?i16,
+                        ?i32,
+                        => {
+                            @field(result, field.name) = std.fmt.parseInt(@typeInfo(field.field_type).Optional.child, value, 10) catch unreachable;
+                        },
+                        i8, i16, i32 => {
                             @field(result, field.name) = std.fmt.parseInt(field.field_type, value, 10) catch unreachable;
                         },
-                        []const u8 => {
+                        []const u8, ?[]const u8 => {
                             @field(result, field.name) = value;
                         },
                         else => {},
@@ -307,6 +317,12 @@ test "database" {
         age: i16,
     };
 
+    const UsersOptional = struct {
+        id: ?i16,
+        name: ?[]const u8,
+        age: i16,
+    };
+
     var db = try Pg.connect(allocator, "postgresql://root@tonis-xps:26257?sslmode=disable");
 
     const schema =
@@ -325,7 +341,7 @@ test "database" {
     var result3 = try db.execValues("SELECT * FROM users WHERE age = {d}", .{25});
 
     var user = result.parse(Users).?;
-    var user2 = result2.parse(Users).?;
+    var user2 = result2.parse(UsersOptional).?;
 
     testing.expectEqual(result.rows, 1);
     testing.expectEqual(result2.rows, 1);
@@ -334,8 +350,8 @@ test "database" {
     testing.expectEqual(user.id, 1);
     testing.expectEqualStrings(user.name, "Charlie");
 
-    testing.expectEqual(user2.id, 2);
-    testing.expectEqualStrings(user2.name, "Steve");
+    testing.expectEqual(user2.id.?, 2);
+    testing.expectEqualStrings(user2.name.?, "Steve");
 
     while (result3.parse(Users)) |data| testing.expectEqual(data.age, 25);
 
