@@ -37,8 +37,10 @@ pub fn main() !void {
     _ = try db.execValues("INSERT INTO users (id, name, age) VALUES ({d}, {s}, {d})", .{ 5, "Tom", 32 });
 
     var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
+
+    var age: u16 = 25;
     var result2 = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
-    var result3 = try db.execValues("SELECT * FROM users WHERE age = {d}", .{25});
+    var result3 = try db.execValues("SELECT * FROM users WHERE age = {d}", .{age});
 
     while (result3.parse(Users)) |user| {
         print("{s} \n", .{user.name});

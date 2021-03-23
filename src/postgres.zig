@@ -226,6 +226,7 @@ pub const Pg = struct {
         }
     }
 
+    //Re-map default values so they are valid for postgre
     fn parseValues(values: anytype, comptime query: []const u8, allocator: *Allocator) ![]const u8 {
         comptime var values_info = @typeInfo(@TypeOf(values));
         comptime var temp_fields: [values_info.Struct.fields.len]std.builtin.TypeInfo.StructField = undefined;
@@ -235,11 +236,11 @@ pub const Pg = struct {
             const field_type = @TypeOf(value);
 
             switch (field_type) {
-                comptime_int => {
+                i16, i32, u8, u16, u32, usize, comptime_int => {
                     temp_fields[index] = std.builtin.TypeInfo.StructField{
                         .name = field.name,
                         .field_type = i32,
-                        .default_value = @intCast(i32, value),
+                        .default_value = null,
                         .is_comptime = false,
                         .alignment = if (@sizeOf(field.field_type) > 0) @alignOf(field.field_type) else 0,
                     };
@@ -247,8 +248,8 @@ pub const Pg = struct {
                 else => {
                     temp_fields[index] = std.builtin.TypeInfo.StructField{
                         .name = field.name,
-                        .field_type = *const [std.mem.len(value) + 2:0]u8,
-                        .default_value = "'" ++ value ++ "'",
+                        .field_type = []const u8,
+                        .default_value = null,
                         .is_comptime = false,
                         .alignment = if (@sizeOf(field.field_type) > 0) @alignOf(field.field_type) else 0,
                     };
@@ -257,8 +258,25 @@ pub const Pg = struct {
         }
 
         values_info.Struct.fields = &temp_fields;
+        var parsed_values: @Type(values_info) = undefined;
+        inline for (values_info.Struct.fields) |field, index| {
+            const value = @field(values, field.name);
 
-        return try std.fmt.allocPrint(allocator, query, @Type(values_info){});
+            switch (field.field_type) {
+                comptime_int => {
+                    @field(parsed_values, field.name) = @intCast(i32, value);
+                    return;
+                },
+                i16, i32, u8, u16, u32, usize => {
+                    @field(parsed_values, field.name) = @as(i32, value);
+                },
+                else => {
+                    @field(parsed_values, field.name) = try std.fmt.allocPrint(allocator, "'{s}'", .{value});
+                },
+            }
+        }
+
+        return try std.fmt.allocPrint(allocator, query, parsed_values);
     }
 
     pub fn execValues(self: Self, comptime query: []const u8, values: anytype) !Result {
