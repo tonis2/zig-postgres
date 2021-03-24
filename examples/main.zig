@@ -58,5 +58,6 @@ pub fn main() !void {
 
     defer {
         std.debug.assert(!gpa.deinit());
+        db.deinit();
     }
 }

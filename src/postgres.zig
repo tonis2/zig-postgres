@@ -62,7 +62,7 @@ pub const Result = struct {
         var col_id: usize = 0;
         while (col_id < self.columns) : (col_id += 1) {
             const column_name = self.columnName(col_id);
-            const column_type = self.getType(col_id);
+            // const column_type = self.getType(col_id);
             const value: []const u8 = self.getValue(self.active_row, col_id);
 
             inline for (struct_fields) |field| {
@@ -299,7 +299,7 @@ pub const Pg = struct {
         return self.exec(command);
     }
 
-    pub fn finish(self: *Self) void {
+    pub fn deinit(self: *Self) void {
         c.PQfinish(self.connection);
     }
 };
@@ -309,7 +309,7 @@ const testing = std.testing;
 test "database" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = &gpa.allocator;
-    defer std.debug.assert(!gpa.deinit());
+   
 
     const Users = struct {
         id: i16,
@@ -366,4 +366,9 @@ test "database" {
     testing.expectEqual(result4.rows, 3);
 
     _ = try db.exec("DROP TABLE users");
+
+     defer {
+         std.debug.assert(!gpa.deinit());
+         db.deinit();
+     }
 }
