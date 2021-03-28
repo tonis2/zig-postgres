@@ -14,7 +14,7 @@ const ArrayList = std.ArrayList;
 const print = std.debug.print;
 
 pub const Result = struct {
-    res: *c.PGresult,
+    res: ?*c.PGresult,
     columns: usize,
     rows: usize,
     active_row: usize = 0,
@@ -22,6 +22,15 @@ pub const Result = struct {
     pub fn new(result: *c.PGresult) Result {
         const rows = @intCast(usize, c.PQntuples(result));
         const columns = @intCast(usize, c.PQnfields(result));
+
+        if (rows == 0) {
+            c.PQclear(result);
+            return Result{
+                .res = null,
+                .columns = columns,
+                .rows = rows,
+            };
+        }
 
         return Result{
             .res = result,
@@ -31,17 +40,17 @@ pub const Result = struct {
     }
 
     fn columnName(self: Result, column_number: usize) []const u8 {
-        const value = c.PQfname(self.res, @intCast(c_int, column_number));
+        const value = c.PQfname(self.res.?, @intCast(c_int, column_number));
         return @as([*c]const u8, value)[0..std.mem.len(value)];
     }
 
     fn getType(self: Result, column_number: usize) ColumnType {
-        var oid = @intCast(usize, c.PQftype(self.res, @intCast(c_int, column_number)));
+        var oid = @intCast(usize, c.PQftype(self.res.?, @intCast(c_int, column_number)));
         return std.meta.intToEnum(ColumnType, oid) catch return ColumnType.Unknown;
     }
 
     fn getValue(self: Result, row_number: usize, column_number: usize) []const u8 {
-        const value = c.PQgetvalue(self.res, @intCast(c_int, row_number), @intCast(c_int, column_number));
+        const value = c.PQgetvalue(self.res.?, @intCast(c_int, row_number), @intCast(c_int, column_number));
         return @as([*c]const u8, value)[0..std.mem.len(value)];
     }
 
@@ -101,7 +110,7 @@ pub const Result = struct {
     }
 
     pub fn deinit(self: Result) void {
-        c.PQclear(self.res);
+        c.PQclear(self.res.?);
     }
 };
 
@@ -131,12 +140,17 @@ pub const Pg = struct {
         };
     }
 
-    pub fn insert(self: Self, data: anytype) !void {
+    pub fn insert(self: Self, data: anytype) !Result {
         var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         const allocator = &temp_memory.allocator;
 
         var builder = try Builder.new(.Insert, allocator);
         const type_info = @typeInfo(@TypeOf(data));
+
+        defer {
+            builder.deinit();
+            temp_memory.deinit();
+        }
 
         switch (type_info) {
             .Pointer => {
@@ -220,10 +234,7 @@ pub const Pg = struct {
 
         try builder.end();
         //Exec command
-        _ = try self.exec(builder.command());
-
-        builder.deinit();
-        temp_memory.deinit();
+        return try self.exec(builder.command());
     }
 
     pub fn exec(self: Self, query: []const u8) !Result {
@@ -335,9 +346,9 @@ test "database" {
 
     _ = try db.exec(schema);
 
-    try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
-    try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
-    try db.insert(Users{ .id = 3, .name = "Tom", .age = 25 });
+    _ = try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
+    _ = try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
+    _ = try db.insert(Users{ .id = 3, .name = "Tom", .age = 25 });
 
     var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
     var result2 = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
@@ -358,7 +369,7 @@ test "database" {
 
     while (result3.parse(Users)) |data| testing.expectEqual(data.age, 25);
 
-    try db.insert(&[_]Users{
+    _ = try db.insert(&[_]Users{
         Users{ .id = 4, .name = "Tony", .age = 33 },
         Users{ .id = 5, .name = "Sara", .age = 33 },
         Users{ .id = 6, .name = "Tony", .age = 33 },
