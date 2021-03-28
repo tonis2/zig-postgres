@@ -15,6 +15,11 @@ pub fn main() !void {
 
     var db = try Pg.connect(allocator, "postgresql://root@tonis-xps:26257?sslmode=disable");
 
+    defer {
+        std.debug.assert(!gpa.deinit());
+        db.deinit();
+    }
+
     const schema =
         \\CREATE DATABASE IF NOT EXISTS root;
         \\CREATE TABLE IF NOT EXISTS users (id INT, name TEXT, age INT);
@@ -55,9 +60,4 @@ pub fn main() !void {
     print("{d} \n", .{user2.id});
     print("{s} \n", .{user2.name});
     _ = try db.exec("DROP TABLE users");
-
-    defer {
-        std.debug.assert(!gpa.deinit());
-        db.deinit();
-    }
 }

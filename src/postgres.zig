@@ -62,7 +62,7 @@ pub const Result = struct {
         var col_id: usize = 0;
         while (col_id < self.columns) : (col_id += 1) {
             const column_name = self.columnName(col_id);
-            // const column_type = self.getType(col_id);
+            const column_type = self.getType(col_id);
             const value: []const u8 = self.getValue(self.active_row, col_id);
 
             inline for (struct_fields) |field| {
@@ -132,10 +132,10 @@ pub const Pg = struct {
     }
 
     pub fn insert(self: Self, data: anytype) !void {
-        var builder = try Builder.new(.Insert, self.allocator);
         var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         const allocator = &temp_memory.allocator;
 
+        var builder = try Builder.new(.Insert, allocator);
         const type_info = @typeInfo(@TypeOf(data));
 
         switch (type_info) {
@@ -166,10 +166,10 @@ pub const Pg = struct {
 
                                 //Cast int to string
                                 i16, i32, u8, u16, u32, usize => {
-                                    try builder.addValue(try std.fmt.allocPrint(allocator, "{d}", .{field_value}));
+                                    try builder.addNumValue(field_value);
                                 },
                                 []const u8 => {
-                                    try builder.addValue(try std.fmt.allocPrint(allocator, "'{s}'", .{field_value}));
+                                    try builder.addStringValue(field_value);
                                 },
                                 else => {
                                     //Todo other types
@@ -187,19 +187,31 @@ pub const Pg = struct {
                 inline for (struct_fields) |field, index| {
                     const field_value = @field(data, field.name);
                     const field_type: type = field.field_type;
+                    const field_type_info = @typeInfo(field_type);
 
-                    try builder.addColumn(field.name);
+                    if (field_type_info == .Optional) {
+                        if (field_value != null) {
+                            try builder.addColumn(field.name);
+                        }
+                    } else {
+                        try builder.addColumn(field.name);
+                    }
 
                     switch (field_type) {
                         i16, i32, u8, u16, u32, usize => {
-                            try builder.addValue(try std.fmt.allocPrint(allocator, "{d}", .{field_value}));
+                            try builder.addNumValue(field_value);
                         },
                         []const u8 => {
-                            try builder.addValue(try std.fmt.allocPrint(allocator, "'{s}'", .{field_value}));
+                            try builder.addStringValue(field_value);
                         },
-                        else => {
-                            //Todo other types
+                        ?[]const u8 => {
+                            if (field_value != null)
+                                try builder.addStringValue(field_value.?);
                         },
+                        [][]const u8 => {
+                            try builder.addStringArray(field_value);
+                        },
+                        else => {},
                     }
                 }
             },
@@ -207,13 +219,11 @@ pub const Pg = struct {
         }
 
         try builder.end();
-
         //Exec command
-        _ = try self.exec(builder.commands.items);
-        defer {
-            temp_memory.deinit();
-            builder.deinit();
-        }
+        _ = try self.exec(builder.command());
+
+        builder.deinit();
+        temp_memory.deinit();
     }
 
     pub fn exec(self: Self, query: []const u8) !Result {
@@ -309,17 +319,10 @@ const testing = std.testing;
 test "database" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = &gpa.allocator;
-   
 
     const Users = struct {
         id: i16,
         name: []const u8,
-        age: i16,
-    };
-
-    const UsersOptional = struct {
-        id: ?i16,
-        name: ?[]const u8,
         age: i16,
     };
 
@@ -341,7 +344,7 @@ test "database" {
     var result3 = try db.execValues("SELECT * FROM users WHERE age = {d}", .{25});
 
     var user = result.parse(Users).?;
-    var user2 = result2.parse(UsersOptional).?;
+    var user2 = result2.parse(Users).?;
 
     testing.expectEqual(result.rows, 1);
     testing.expectEqual(result2.rows, 1);
@@ -350,8 +353,8 @@ test "database" {
     testing.expectEqual(user.id, 1);
     testing.expectEqualStrings(user.name, "Charlie");
 
-    testing.expectEqual(user2.id.?, 2);
-    testing.expectEqualStrings(user2.name.?, "Steve");
+    testing.expectEqual(user2.id, 2);
+    testing.expectEqualStrings(user2.name, "Steve");
 
     while (result3.parse(Users)) |data| testing.expectEqual(data.age, 25);
 
@@ -367,8 +370,8 @@ test "database" {
 
     _ = try db.exec("DROP TABLE users");
 
-     defer {
-         std.debug.assert(!gpa.deinit());
-         db.deinit();
-     }
+    defer {
+        std.debug.assert(!gpa.deinit());
+        db.deinit();
+    }
 }
