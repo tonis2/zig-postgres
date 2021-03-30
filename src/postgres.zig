@@ -257,8 +257,12 @@ pub const Pg = struct {
         }
     }
 
-    //Re-map default values so they are valid for postgre
-    fn parseValues(values: anytype, comptime query: []const u8, allocator: *Allocator) ![]const u8 {
+    pub fn execValues(self: Self, comptime query: []const u8, values: anytype) !Result {
+        var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer temp_memory.deinit();
+
+        const allocator = &temp_memory.allocator;
+
         comptime var values_info = @typeInfo(@TypeOf(values));
         comptime var temp_fields: [values_info.Struct.fields.len]std.builtin.TypeInfo.StructField = undefined;
 
@@ -307,17 +311,7 @@ pub const Pg = struct {
             }
         }
 
-        return try std.fmt.allocPrint(allocator, query, parsed_values);
-    }
-
-    pub fn execValues(self: Self, comptime query: []const u8, values: anytype) !Result {
-        var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        defer temp_memory.deinit();
-
-        const allocator = &temp_memory.allocator;
-        const command = try parseValues(values, query, allocator);
-
-        return self.exec(command);
+        return try self.exec(try std.fmt.allocPrint(allocator, query, parsed_values));
     }
 
     pub fn deinit(self: *Self) void {

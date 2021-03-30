@@ -32,12 +32,12 @@ pub fn main() !void {
     _ = try db.insert(data);
     _ = try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
     _ = try db.insert(Users{ .id = 3, .name = "Karl", .age = 25 });
-
     _ = try db.insert(&[_]Users{
         Users{ .id = 4, .name = "Tony", .age = 25 },
         Users{ .id = 5, .name = "Sara", .age = 32 },
         Users{ .id = 6, .name = "Fred", .age = 11 },
     });
+
     var age: u16 = 25;
     var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
     var result2 = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
