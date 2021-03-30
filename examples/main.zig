@@ -2,6 +2,7 @@ const std = @import("std");
 const print = std.debug.print;
 
 const Pg = @import("postgres").Pg;
+const ArrayList = std.ArrayList;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = &gpa.allocator;
@@ -11,6 +12,10 @@ pub fn main() !void {
         id: i16,
         name: []const u8,
         age: i16,
+    };
+
+    const Class = struct {
+        pupils: ArrayList([]const u8),
     };
 
     var db = try Pg.connect(allocator, "postgresql://root@tonis-xps:26257?sslmode=disable");
@@ -23,6 +28,7 @@ pub fn main() !void {
     const schema =
         \\CREATE DATABASE IF NOT EXISTS root;
         \\CREATE TABLE IF NOT EXISTS users (id INT, name TEXT, age INT);
+        \\CREATE TABLE IF NOT EXISTS class (pupils TEXT[]);
     ;
 
     _ = try db.exec(schema);
@@ -49,12 +55,28 @@ pub fn main() !void {
 
     var user = result.parse(Users).?;
     var user2 = result2.parse(Users).?;
+
     print("{d} \n", .{result.rows});
     print("{d} \n", .{user.id});
     print("{s} \n", .{user.name});
 
     print("{d} \n", .{user2.id});
     print("{s} \n", .{user2.name});
+
+    //Inserting Arrays to db
+
+    var class = Class{ .pupils = ArrayList([]const u8).init(allocator) };
+    defer class.pupils.deinit();
+
+    try class.pupils.append("Steve");
+    try class.pupils.append("Karl");
+    try class.pupils.append("Fred");
+
+    _ = try db.insert(class);
+
+    // class.pupils.shrinkAndFree(0);
+
+    // var classResult = try db.exec("SELECT * FROM class");
 
     _ = try db.exec("DROP TABLE users");
 }

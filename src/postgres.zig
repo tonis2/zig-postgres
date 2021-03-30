@@ -98,6 +98,9 @@ pub const Result = struct {
                         []const u8, ?[]const u8 => {
                             @field(result, field.name) = value;
                         },
+                        ArrayList([]const u8), ?ArrayList([]const u8) => {
+                            print("todo {s} \n", .{value});
+                        },
                         else => {},
                     }
                 }
@@ -175,20 +178,7 @@ pub const Pg = struct {
                             const field_value = @field(child, field.name);
                             const field_type: type = field.field_type;
 
-                            //Add the struct values in array
-                            switch (field_type) {
-
-                                //Cast int to string
-                                i16, i32, u8, u16, u32, usize => {
-                                    try builder.addNumValue(field_value);
-                                },
-                                []const u8 => {
-                                    try builder.addStringValue(field_value);
-                                },
-                                else => {
-                                    //Todo other types
-                                },
-                            }
+                            try builder.autoAdd(field_type, field_value);
                         }
                     }
                 }
@@ -211,28 +201,14 @@ pub const Pg = struct {
                         try builder.addColumn(field.name);
                     }
 
-                    switch (field_type) {
-                        i16, i32, u8, u16, u32, usize => {
-                            try builder.addNumValue(field_value);
-                        },
-                        []const u8 => {
-                            try builder.addStringValue(field_value);
-                        },
-                        ?[]const u8 => {
-                            if (field_value != null)
-                                try builder.addStringValue(field_value.?);
-                        },
-                        [][]const u8 => {
-                            try builder.addStringArray(field_value);
-                        },
-                        else => {},
-                    }
+                    try builder.autoAdd(field_type, field_value);
                 }
             },
             else => {},
         }
 
         try builder.end();
+
         //Exec command
         return try self.exec(builder.command());
     }

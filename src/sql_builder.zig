@@ -47,17 +47,36 @@ pub const Builder = struct {
         try self.values.append(value);
     }
 
-    pub fn addStringArray(self: *Builder, values: anytype) !void {
+    pub fn addStringArray(self: *Builder, values: ArrayList([]const u8)) !void {
         _ = try self.buffer.writer().write("ARRAY[");
-        for (values) |value, i| _ = {
+        for (values.items) |value, i| _ = {
             _ = try self.buffer.writer().write(try std.fmt.allocPrint(self.allocator, "'{s}'", .{value}));
-            if (i < values.len - 1)
+            if (i < values.items.len - 1)
                 _ = try self.buffer.writer().write(",");
         };
         _ = try self.buffer.writer().write("]");
 
         try self.values.append(self.buffer.toOwnedSlice());
         self.buffer.shrinkAndFree(0);
+    }
+
+    pub fn autoAdd(self: *Builder, comptime field_type: type, field_value: anytype) !void {
+        switch (field_type) {
+            i16, i32, u8, u16, u32, usize => {
+                try self.addNumValue(field_value);
+            },
+            []const u8 => {
+                try self.addStringValue(field_value);
+            },
+            ?[]const u8 => {
+                if (field_value != null)
+                    try self.addStringValue(field_value.?);
+            },
+            ArrayList([]const u8) => {
+                try self.addStringArray(field_value);
+            },
+            else => {},
+        }
     }
 
     pub fn end(self: *Builder) !void {
