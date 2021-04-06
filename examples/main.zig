@@ -1,23 +1,45 @@
 const std = @import("std");
 const print = std.debug.print;
 
-const Pg = @import("postgres").Pg;
+const Postgres = @import("postgres");
+const Pg = Postgres.Pg;
+const Result = Postgres.Result;
+const Builder = Postgres.Builder;
 const ArrayList = std.ArrayList;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = &gpa.allocator;
 
+const Users = struct {
+    id: i16,
+    name: []const u8,
+    age: i16,
+    cards: ArrayList([]const u8),
+
+    pub fn onSave(self: *const Users, comptime field: type, builder: *Builder) !void {
+        switch (field) {
+            ArrayList([]const u8) => {
+                _ = try builder.buffer.writer().write("ARRAY[");
+                for (self.cards.items) |value, i| _ = {
+                    _ = try builder.buffer.writer().write(try std.fmt.allocPrint(builder.allocator, "'{s}'", .{value}));
+                    if (i < self.cards.items.len - 1)
+                        _ = try builder.buffer.writer().write(",");
+                };
+                _ = try builder.buffer.writer().write("]");
+
+                try builder.values.append(builder.buffer.toOwnedSlice());
+                builder.buffer.shrinkAndFree(0);
+            },
+            else => {},
+        }
+    }
+
+    pub fn onParse() !void {
+
+    }
+};
+
 pub fn main() !void {
-    const Users = struct {
-        id: i16,
-        name: []const u8,
-        age: i16,
-    };
-
-    const Class = struct {
-        pupils: ArrayList([]const u8),
-    };
-
     var db = try Pg.connect(allocator, "postgresql://root@tonis-xps:26257?sslmode=disable");
 
     defer {
@@ -27,56 +49,20 @@ pub fn main() !void {
 
     const schema =
         \\CREATE DATABASE IF NOT EXISTS root;
-        \\CREATE TABLE IF NOT EXISTS users (id INT, name TEXT, age INT);
-        \\CREATE TABLE IF NOT EXISTS class (pupils TEXT[]);
+        \\CREATE TABLE users (id INT, name TEXT, age INT, cards STRING[]);
     ;
 
     _ = try db.exec(schema);
 
-    var data = Users{ .id = 1, .name = "Charlie", .age = 20 };
+    var cards = [3][]const u8{
+        "Ace",
+        "2",
+        "Queen",
+    };
 
-    _ = try db.insert(data);
-    _ = try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
-    _ = try db.insert(Users{ .id = 3, .name = "Karl", .age = 25 });
-    _ = try db.insert(&[_]Users{
-        Users{ .id = 4, .name = "Tony", .age = 25 },
-        Users{ .id = 5, .name = "Sara", .age = 32 },
-        Users{ .id = 6, .name = "Fred", .age = 11 },
-    });
+    var user = Users{ .id = 1, .age = 3, .name = "Steve", .cards = ArrayList([]const u8).fromOwnedSlice(allocator, cards[0..]) };
 
-    var age: u16 = 25;
-    var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
-    var result2 = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
-    var result3 = try db.execValues("SELECT * FROM users WHERE age = {d}", .{age});
-
-    while (result3.parse(Users)) |user| {
-        print("{s} \n", .{user.name});
-    }
-
-    var user = result.parse(Users).?;
-    var user2 = result2.parse(Users).?;
-
-    print("{d} \n", .{result.rows});
-    print("{d} \n", .{user.id});
-    print("{s} \n", .{user.name});
-
-    print("{d} \n", .{user2.id});
-    print("{s} \n", .{user2.name});
-
-    //Inserting Arrays to db
-
-    var class = Class{ .pupils = ArrayList([]const u8).init(allocator) };
-    defer class.pupils.deinit();
-
-    try class.pupils.append("Steve");
-    try class.pupils.append("Karl");
-    try class.pupils.append("Fred");
-
-    _ = try db.insert(class);
-
-    // class.pupils.shrinkAndFree(0);
-
-    // var classResult = try db.exec("SELECT * FROM class");
+    _ = try db.insert(user);
 
     _ = try db.exec("DROP TABLE users");
 }

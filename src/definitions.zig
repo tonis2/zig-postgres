@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const Error = error{ ConnectionFailure, QueryFailure, NotConnected, NotImplemented, WrongType };
+pub const Error = error{ ConnectionFailure, QueryFailure, NotConnected, NotImplemented, WrongType, EmptyResult };
 
 pub const ColumnType = enum(usize) {
     Unknown = 0,
