@@ -14,46 +14,43 @@ var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = &gpa.allocator;
 
 const Users = struct {
-    id: i16 = 0,
+    id: u16 = 0,
     name: []const u8 = "",
-    age: i16 = 0,
+    age: u16 = 0,
     cards: ArrayList([]const u8),
 
     pub fn onSave(self: *const Users, comptime field: FieldInfo, builder: *Builder) !void {
-        if (std.mem.eql(
-            u8,
-            field.name,
-            "cards",
-        )) {
-            _ = try builder.buffer.writer().write("ARRAY[");
-            for (self.cards.items) |value, i| _ = {
-                _ = try builder.buffer.writer().write(try std.fmt.allocPrint(builder.allocator, "'{s}'", .{value}));
-                if (i < self.cards.items.len - 1)
-                    _ = try builder.buffer.writer().write(",");
-            };
-            _ = try builder.buffer.writer().write("]");
+        switch (field.type) {
+            ArrayList([]const u8) => {
+                _ = try builder.buffer.writer().write("ARRAY[");
+                for (self.cards.items) |value, i| _ = {
+                    _ = try builder.buffer.writer().write(try std.fmt.allocPrint(builder.allocator, "'{s}'", .{value}));
+                    if (i < self.cards.items.len - 1)
+                        _ = try builder.buffer.writer().write(",");
+                };
+                _ = try builder.buffer.writer().write("]");
 
-            try builder.values.append(builder.buffer.toOwnedSlice());
-            builder.buffer.shrinkAndFree(0);
+                try builder.values.append(builder.buffer.toOwnedSlice());
+                builder.buffer.shrinkAndFree(0);
+            },
+            else => {},
         }
     }
 
     pub fn onLoad(self: *Users, comptime field: FieldInfo, value: []const u8) !void {
-        if (std.mem.eql(
-            u8,
-            field.name,
-            "cards",
-        )) {
-            //Split db strings from "," and push all the values to cards
-            const parser = try Utf8View.init(value);
-            var iterator = parser.iterator();
-            var pause: usize = 1;
-            while (iterator.nextCodepointSlice()) |char| {
-                if (std.mem.eql(u8, ",", iterator.peek(1))) {
-                    try self.cards.append(value[pause..iterator.i]);
-                    pause = iterator.i + 1;
+        switch (field.type) {
+            ArrayList([]const u8) => {
+                const parser = try Utf8View.init(value);
+                var iterator = parser.iterator();
+                var pause: usize = 1;
+                while (iterator.nextCodepointSlice()) |char| {
+                    if (std.mem.eql(u8, ",", iterator.peek(1))) {
+                        try self.cards.append(value[pause..iterator.i]);
+                        pause = iterator.i + 1;
+                    }
                 }
-            }
+            },
+            else => {},
         }
     }
 };
@@ -86,7 +83,13 @@ pub fn main() !void {
     defer user_result.cards.deinit();
 
     var result = try db.execValues("SELECT * FROM users WHERE name = {s};", .{"Steve"});
+
     try result.parseTo(&user_result);
+
+    print("{d} \n", .{user_result.id});
+
+    var result2 = try db.execValues("SELECT * FROM users WHERE name = {s};", .{"Karl"});
+    try result2.parseTo(&user_result);
 
     print("{s} \n", .{user_result.name});
 

@@ -205,9 +205,9 @@ test "database" {
     }
 
     const Users = struct {
-        id: i16,
+        id: u16,
         name: []const u8,
-        age: i16,
+        age: u16,
     };
 
     const schema =
@@ -238,13 +238,19 @@ test "database" {
     });
 
     var result4 = try db.execValues("SELECT * FROM users WHERE age = {d}", .{33});
+    defer result4.deinit();
+
+    var user3 = result4.parse(Users).?;
 
     testing.expectEqual(result.rows, 1);
     testing.expectEqual(result2.rows, 1);
     testing.expectEqual(result3.rows, 2);
 
     testing.expectEqual(user.id, 1);
-    // testing.expectEqualStrings(user.name, "Tony33");
+    testing.expectEqual(user.age, 20);
+
+    testing.expectEqual(user3.id, 4);
+    testing.expectEqualStrings(user3.name, "Tony");
 
     testing.expectEqual(user2.id, 2);
     testing.expectEqualStrings(user2.name, "Steve");
