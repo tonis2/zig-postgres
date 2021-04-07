@@ -3,11 +3,14 @@ const std = @import("std");
 const print = std.debug.print;
 const c = @import("./postgres.zig").c;
 const helpers = @import("./helpers.zig");
-const Error = @import("./definitions.zig").Error;
+
 const ColumnType = @import("./definitions.zig").ColumnType;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const Utf8View = std.unicode.Utf8View;
+
+const Definitions = @import("./definitions.zig");
+const Error = Definitions.Error;
+const FieldInfo = Definitions.FieldInfo;
 
 pub const Result = struct {
     res: ?*c.PGresult,
@@ -33,6 +36,10 @@ pub const Result = struct {
             .columns = columns,
             .rows = rows,
         };
+    }
+
+    pub fn isOk(self: Result) bool {
+        return self.rows < 1 and self.err == null;
     }
 
     fn columnName(self: Result, column_number: usize) []const u8 {
@@ -117,7 +124,7 @@ pub const Result = struct {
             @compileError("Need to use pointer to struct as parser result");
         }
 
-        const struct_fields = @typeInfo(type_info.Pointer.child).Struct.fields;
+        const struct_info = @typeInfo(type_info.Pointer.child).Struct;
 
         var col_id: usize = 0;
         while (col_id < self.columns) : (col_id += 1) {
@@ -125,7 +132,7 @@ pub const Result = struct {
             const column_type = self.getType(col_id);
             const value: []const u8 = self.getValue(self.active_row, col_id);
 
-            inline for (struct_fields) |field| {
+            inline for (struct_info.fields) |field| {
                 if (std.mem.eql(u8, field.name, column_name)) {
                     switch (field.field_type) {
                         ?u8,
@@ -149,20 +156,10 @@ pub const Result = struct {
                         []const u8, ?[]const u8 => {
                             @field(result, field.name) = value;
                         },
-                        ArrayList([]const u8), ?ArrayList([]const u8) => {
-                            //Split db strings from "," and push all the values
-                            const parser = try Utf8View.init(value);
-                            var iterator = parser.iterator();
-                            var pause: usize = 1;
-                            while (iterator.nextCodepointSlice()) |char| {
-                                if (std.mem.eql(u8, ",", iterator.peek(1))) {
-                                    print("{s} \n", .{value[pause..iterator.i]});
-                                    try @field(result, field.name).append(value[pause..iterator.i]);
-                                    pause = iterator.i + 1;
-                                }
-                            }
+                        else => {
+                            const is_extended = @hasDecl(type_info.Pointer.child, "onLoad");
+                            if (is_extended) try @field(result, "onLoad")(FieldInfo{ .name = field.name, .type = field.field_type }, value);
                         },
-                        else => {},
                     }
                 }
             }

@@ -4,8 +4,11 @@ pub const c = @cImport({
 });
 
 pub const Builder = @import("./sql_builder.zig").Builder;
+pub const FieldInfo = Definitions.FieldInfo;
+
 const helpers = @import("./helpers.zig");
-const Error = @import("./definitions.zig").Error;
+const Definitions = @import("./definitions.zig");
+const Error = Definitions.Error;
 
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
@@ -72,9 +75,8 @@ pub const Pg = struct {
                             if (child_index == 0) try builder.addColumn(field.name);
 
                             const field_value = @field(child, field.name);
-                            const field_type: type = field.field_type;
 
-                            try builder.autoAdd(child, field_type, field_value);
+                            try builder.autoAdd(child, FieldInfo{ .name = field.name, .type = field.field_type }, field_value);
                         }
                     }
                 }
@@ -86,8 +88,7 @@ pub const Pg = struct {
                 try builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
                 inline for (struct_info.fields) |field, index| {
                     const field_value = @field(data, field.name);
-                    const field_type: type = field.field_type;
-                    const field_type_info = @typeInfo(field_type);
+                    const field_type_info = @typeInfo(field.field_type);
 
                     if (field_type_info == .Optional) {
                         if (field_value != null) {
@@ -97,7 +98,7 @@ pub const Pg = struct {
                         try builder.addColumn(field.name);
                     }
 
-                    try builder.autoAdd(data, field_type, field_value);
+                    try builder.autoAdd(data, FieldInfo{ .name = field.name, .type = field.field_type }, field_value);
                 }
             },
             else => {},
@@ -115,7 +116,7 @@ pub const Pg = struct {
 
         var res: ?*c.PGresult = c.PQexec(self.connection, cstr_query);
         var response_code = @enumToInt(c.PQresultStatus(res));
-
+        var err: ?Error = null;
         if (response_code != c.PGRES_TUPLES_OK and response_code != c.PGRES_COMMAND_OK and response_code != c.PGRES_NONFATAL_ERROR) {
             std.debug.warn("Error {s}\n", .{c.PQresultErrorMessage(res)});
             c.PQclear(res);
@@ -178,12 +179,12 @@ pub const Pg = struct {
                     @field(parsed_values, field.name) = @as(i32, value);
                 },
                 else => {
-                    @field(parsed_values, field.name) = try std.fmt.allocPrint(allocator, "'{s}'", .{value});
+                    @field(parsed_values, field.name) = std.fmt.allocPrint(allocator, "'{s}'", .{value}) catch unreachable;
                 },
             }
         }
 
-        return try self.exec(try std.fmt.allocPrint(allocator, query, parsed_values));
+        return self.exec(std.fmt.allocPrint(allocator, query, parsed_values) catch unreachable);
     }
 
     pub fn deinit(self: *Self) void {
@@ -242,12 +243,12 @@ test "database" {
     testing.expectEqual(result2.rows, 1);
     testing.expectEqual(result3.rows, 2);
 
-    // testing.expectEqual(user.id, 1);
-    // testing.expectEqualStrings(user.name, "Charlie");
+    testing.expectEqual(user.id, 1);
+    // testing.expectEqualStrings(user.name, "Tony33");
 
-    // testing.expectEqual(user2.id, 2);
-    // testing.expectEqualStrings(user2.name, "Steve");
-    // testing.expectEqual(result4.rows, 3);
+    testing.expectEqual(user2.id, 2);
+    testing.expectEqualStrings(user2.name, "Steve");
+    testing.expectEqual(result4.rows, 3);
 
     _ = try db.exec("DROP TABLE users");
 }

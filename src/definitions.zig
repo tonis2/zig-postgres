@@ -23,3 +23,8 @@ pub const ColumnType = enum(usize) {
     Jsonb = 3820,
     Uuid = 2950,
 };
+
+pub const FieldInfo = struct {
+    name: []const u8,
+    type: type,
+};

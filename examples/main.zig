@@ -5,37 +5,56 @@ const Postgres = @import("postgres");
 const Pg = Postgres.Pg;
 const Result = Postgres.Result;
 const Builder = Postgres.Builder;
+const FieldInfo = Postgres.FieldInfo;
+
 const ArrayList = std.ArrayList;
+const Utf8View = std.unicode.Utf8View;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = &gpa.allocator;
 
 const Users = struct {
-    id: i16,
-    name: []const u8,
-    age: i16,
+    id: i16 = 0,
+    name: []const u8 = "",
+    age: i16 = 0,
     cards: ArrayList([]const u8),
 
-    pub fn onSave(self: *const Users, comptime field: type, builder: *Builder) !void {
-        switch (field) {
-            ArrayList([]const u8) => {
-                _ = try builder.buffer.writer().write("ARRAY[");
-                for (self.cards.items) |value, i| _ = {
-                    _ = try builder.buffer.writer().write(try std.fmt.allocPrint(builder.allocator, "'{s}'", .{value}));
-                    if (i < self.cards.items.len - 1)
-                        _ = try builder.buffer.writer().write(",");
-                };
-                _ = try builder.buffer.writer().write("]");
+    pub fn onSave(self: *const Users, comptime field: FieldInfo, builder: *Builder) !void {
+        if (std.mem.eql(
+            u8,
+            field.name,
+            "cards",
+        )) {
+            _ = try builder.buffer.writer().write("ARRAY[");
+            for (self.cards.items) |value, i| _ = {
+                _ = try builder.buffer.writer().write(try std.fmt.allocPrint(builder.allocator, "'{s}'", .{value}));
+                if (i < self.cards.items.len - 1)
+                    _ = try builder.buffer.writer().write(",");
+            };
+            _ = try builder.buffer.writer().write("]");
 
-                try builder.values.append(builder.buffer.toOwnedSlice());
-                builder.buffer.shrinkAndFree(0);
-            },
-            else => {},
+            try builder.values.append(builder.buffer.toOwnedSlice());
+            builder.buffer.shrinkAndFree(0);
         }
     }
 
-    pub fn onParse() !void {
-
+    pub fn onLoad(self: *Users, comptime field: FieldInfo, value: []const u8) !void {
+        if (std.mem.eql(
+            u8,
+            field.name,
+            "cards",
+        )) {
+            //Split db strings from "," and push all the values to cards
+            const parser = try Utf8View.init(value);
+            var iterator = parser.iterator();
+            var pause: usize = 1;
+            while (iterator.nextCodepointSlice()) |char| {
+                if (std.mem.eql(u8, ",", iterator.peek(1))) {
+                    try self.cards.append(value[pause..iterator.i]);
+                    pause = iterator.i + 1;
+                }
+            }
+        }
     }
 };
 
@@ -49,7 +68,7 @@ pub fn main() !void {
 
     const schema =
         \\CREATE DATABASE IF NOT EXISTS root;
-        \\CREATE TABLE users (id INT, name TEXT, age INT, cards STRING[]);
+        \\CREATE TABLE IF NOT EXISTS users (id INT, name TEXT, age INT, cards STRING[]);
     ;
 
     _ = try db.exec(schema);
@@ -60,9 +79,16 @@ pub fn main() !void {
         "Queen",
     };
 
-    var user = Users{ .id = 1, .age = 3, .name = "Steve", .cards = ArrayList([]const u8).fromOwnedSlice(allocator, cards[0..]) };
+    _ = try db.insert(Users{ .id = 1, .age = 3, .name = "Steve", .cards = ArrayList([]const u8).fromOwnedSlice(allocator, cards[0..]) });
+    _ = try db.insert(Users{ .id = 21, .age = 4, .name = "Karl", .cards = ArrayList([]const u8).fromOwnedSlice(allocator, cards[0..]) });
 
-    _ = try db.insert(user);
+    var user_result = Users{ .cards = ArrayList([]const u8).init(allocator) };
+    defer user_result.cards.deinit();
+
+    var result = try db.execValues("SELECT * FROM users WHERE name = {s};", .{"Steve"});
+    try result.parseTo(&user_result);
+
+    print("{s} \n", .{user_result.name});
 
     _ = try db.exec("DROP TABLE users");
 }

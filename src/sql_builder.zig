@@ -4,7 +4,9 @@ const print = std.debug.print;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
-const Error = @import("./definitions.zig").Error;
+const Definitions = @import("./definitions.zig");
+const Error = Definitions.Error;
+const FieldInfo = Definitions.FieldInfo;
 
 pub const SQL = enum { Insert, Select, Delete, Update };
 
@@ -60,10 +62,10 @@ pub const Builder = struct {
         self.buffer.shrinkAndFree(0);
     }
 
-    pub fn autoAdd(self: *Builder, struct_info: anytype, comptime field_type: type, field_value: anytype) !void {
+    pub fn autoAdd(self: *Builder, struct_info: anytype, comptime field_info: FieldInfo, field_value: anytype) !void {
         const is_extended = @hasDecl(@TypeOf(struct_info), "onSave");
 
-        switch (field_type) {
+        switch (field_info.type) {
             i16, i32, u8, u16, u32, usize => {
                 try self.addNumValue(field_value);
             },
@@ -75,7 +77,7 @@ pub const Builder = struct {
                     try self.addStringValue(field_value.?);
             },
             else => {
-                if (is_extended) try @field(struct_info, "onSave")(field_type, self);
+                if (is_extended) try @field(struct_info, "onSave")(field_info, self);
             },
         }
     }
@@ -182,5 +184,4 @@ test "database" {
 
     testing.expectEqualStrings("INSERT INTO test (id,name,age) VALUES (5,Test,3),(1,Test2,53),(3,Test3,53);", builder2.command());
     builder2.deinit();
-
 }
