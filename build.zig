@@ -1,30 +1,42 @@
 const Builder = @import("std").build.Builder;
 
+const examples = [2][]const u8{ "main", "custom_types" };
+
 pub fn build(b: *Builder) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
 
-    const exe = b.addExecutable("main", "examples/main.zig");
-    exe.setTarget(target);
-    exe.setBuildMode(mode);
+    const db_uri = b.option(
+        []const u8,
+        "db",
+        "Specify the database url name",
+    ) orelse "postgresql://root@tonis-xps:26257?sslmode=disable";
 
-    exe.addPackagePath("postgres", "src/postgres.zig");
-    exe.linkSystemLibrary("c");
-    exe.linkSystemLibrary("libpq");
+    inline for (examples) |example| {
+        const exe = b.addExecutable(example, "examples/" ++ example ++ ".zig");
+        exe.setTarget(target);
+        exe.setBuildMode(mode);
+        exe.addBuildOption([]const u8, "db_uri", db_uri);
 
-    exe.install();
+        exe.addPackagePath("postgres", "src/postgres.zig");
+        exe.linkSystemLibrary("c");
+        exe.linkSystemLibrary("libpq");
 
-    const run_cmd = exe.run();
-    run_cmd.step.dependOn(b.getInstallStep());
+        exe.install();
 
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
+        const run_cmd = exe.run();
+        run_cmd.step.dependOn(b.getInstallStep());
+
+        const run_step = b.step(example, "Run the app");
+        run_step.dependOn(&run_cmd.step);
+    }
 
     const tests = b.addTest("tests.zig");
     tests.setBuildMode(mode);
     tests.setTarget(target);
     tests.linkSystemLibrary("c");
     tests.linkSystemLibrary("libpq");
+    tests.addBuildOption([]const u8, "db_uri", db_uri);
 
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&tests.step);

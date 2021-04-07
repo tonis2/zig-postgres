@@ -34,6 +34,12 @@ This code adds the package and links required libraries.
     exe.linkSystemLibrary("libpq");
 ```
 
+Running examples or tests requires `db` url attribute, for example 
+
+`zig build test -Ddb=postgresql://db_url`
+
+`zig build main -Ddb=postgresql://db_url`
+
 ## How to use
 -----
 

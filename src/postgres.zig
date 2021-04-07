@@ -3,6 +3,8 @@ pub const c = @cImport({
     @cInclude("libpq-fe.h");
 });
 
+const build_options = @import("build_options");
+
 pub const Builder = @import("./sql_builder.zig").Builder;
 pub const FieldInfo = Definitions.FieldInfo;
 
@@ -197,7 +199,7 @@ const testing = std.testing;
 test "database" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = &gpa.allocator;
-    var db = try Pg.connect(allocator, "postgresql://root@tonis-xps:26257?sslmode=disable");
+    var db = try Pg.connect(allocator, build_options.db_uri);
 
     defer {
         std.debug.assert(!gpa.deinit());
