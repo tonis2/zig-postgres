@@ -38,8 +38,8 @@ pub const Result = struct {
         };
     }
 
-    pub fn isOk(self: Result) bool {
-        return self.rows < 1 and self.err == null;
+    pub fn isEmpty(self: Result) bool {
+        return self.rows < 1;
     }
 
     fn columnName(self: Result, column_number: usize) []const u8 {
