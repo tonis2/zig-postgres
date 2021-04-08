@@ -37,7 +37,7 @@ const Users = struct {
 
                 // Append ARRAY string to SQL builder as value
                 try builder.values.append(builder.buffer.toOwnedSlice());
-                builder.buffer.shrinkAndFree(0);
+            
             },
             Stats => {
                 //Convert stats to json and push to builder values
@@ -47,7 +47,7 @@ const Users = struct {
                 _ = try builder.buffer.writer().write(buffer.toOwnedSlice());
                 _ = try builder.buffer.writer().write("')");
                 _ = try builder.values.append(builder.buffer.toOwnedSlice());
-                builder.buffer.shrinkAndFree(0);
+           
             },
             else => {},
         }
