@@ -9,7 +9,7 @@ pub fn build(b: *Builder) void {
     const db_uri = b.option(
         []const u8,
         "db",
-        "Specify the database url name",
+        "Specify the database url",
     ) orelse "postgresql://root@tonis-xps:26257?sslmode=disable";
 
     inline for (examples) |example| {
