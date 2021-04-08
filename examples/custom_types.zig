@@ -10,9 +10,7 @@ const FieldInfo = Postgres.FieldInfo;
 
 const ArrayList = std.ArrayList;
 const Utf8View = std.unicode.Utf8View;
-
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const allocator = &gpa.allocator;
+const Allocator = std.mem.Allocator;
 
 const Stats = struct { wins: u16, losses: u16 };
 
@@ -37,7 +35,6 @@ const Users = struct {
 
                 // Append ARRAY string to SQL builder as value
                 try builder.values.append(builder.buffer.toOwnedSlice());
-            
             },
             Stats => {
                 //Convert stats to json and push to builder values
@@ -47,13 +44,12 @@ const Users = struct {
                 _ = try builder.buffer.writer().write(buffer.toOwnedSlice());
                 _ = try builder.buffer.writer().write("')");
                 _ = try builder.values.append(builder.buffer.toOwnedSlice());
-           
             },
             else => {},
         }
     }
 
-    pub fn onLoad(self: *Users, comptime field: FieldInfo, value: []const u8) !void {
+    pub fn onLoad(self: *Users, comptime field: FieldInfo, value: []const u8, allocator: *Allocator) !void {
         switch (field.type) {
             ArrayList([]const u8) => {
                 // Parse ARRAY[value, value] to values and append these values to ArrayList
@@ -81,6 +77,9 @@ const Users = struct {
 };
 
 pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = &gpa.allocator;
+
     var db = try Pg.connect(allocator, build_options.db_uri);
 
     defer {

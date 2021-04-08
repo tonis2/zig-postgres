@@ -118,6 +118,9 @@ pub const Result = struct {
         if (self.rows < 1) return Error.EmptyResult;
         if (self.active_row == self.rows) return Error.EmptyResult;
 
+        var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer temp_memory.deinit();
+
         const type_info = @typeInfo(@TypeOf(result));
 
         if (type_info != .Pointer) {
@@ -158,7 +161,7 @@ pub const Result = struct {
                         },
                         else => {
                             const is_extended = @hasDecl(type_info.Pointer.child, "onLoad");
-                            if (is_extended) try @field(result, "onLoad")(FieldInfo{ .name = field.name, .type = field.field_type }, value);
+                            if (is_extended) try @field(result, "onLoad")(FieldInfo{ .name = field.name, .type = field.field_type }, value, &temp_memory.allocator);
                         },
                     }
                 }
