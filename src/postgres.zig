@@ -215,7 +215,6 @@ test "database" {
     const schema =
         \\CREATE DATABASE IF NOT EXISTS root;
         \\CREATE TABLE IF NOT EXISTS users (id INT, name TEXT, age INT);
-        \\CREATE TABLE IF NOT EXISTS school (pupils TEXT[]);
     ;
 
     _ = try db.exec(schema);
