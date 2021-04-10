@@ -63,8 +63,8 @@ pub const Builder = struct {
         self.buffer.shrinkAndFree(0);
     }
 
-    pub fn autoAdd(self: *Builder, struct_info: anytype, comptime field_info: FieldInfo, field_value: anytype) !void {
-        const is_extended = @hasDecl(@TypeOf(struct_info), "onSave");
+    pub fn autoAdd(self: *Builder, struct_info: anytype, comptime field_info: FieldInfo, field_value: anytype, extended: bool) !void {
+      
 
         switch (field_info.type) {
             i16, i32, u8, u16, u32, usize => {
@@ -78,7 +78,7 @@ pub const Builder = struct {
                     try self.addStringValue(field_value.?);
             },
             else => {
-                if (is_extended) try @field(struct_info, "onSave")(field_info, self, field_value);
+                if (extended) try @field(struct_info, "onSave")(field_info, self, field_value);
             },
         }
     }

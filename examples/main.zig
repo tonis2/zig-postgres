@@ -34,7 +34,7 @@ pub fn main() !void {
     ;
 
     _ = try db.exec(schema);
-
+    
     _ = try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
     _ = try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
     _ = try db.insert(Users{ .id = 3, .name = "Tom", .age = 25 });

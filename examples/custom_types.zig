@@ -24,9 +24,10 @@ const Users = struct {
     cards: ?[][]const u8 = null,
     stats: Stats = Stats{ .wins = 0, .losses = 0 },
 
-    pub fn onSave(self: *const Users, comptime field: FieldInfo, builder: *Builder, value: anytype) !void {
+    pub fn onSave(self: *Users, comptime field: FieldInfo, builder: *Builder, value: anytype) !void {
         switch (field.type) {
             ?[][]const u8 => {
+                if (value == null) return;
                 // Create ARRAY[value, value]
                 _ = try builder.buffer.writer().write("ARRAY[");
                 for (value.?) |entry, i| _ = {
@@ -108,10 +109,13 @@ pub fn main() !void {
     };
 
     //Save data to db
-    _ = try db.insert(Users{ .id = 1, .age = 3, .name = "Steve", .stats = Stats{ .wins = 0, .losses = 5 }, .cards = cards[0..] });
-    _ = try db.insert(Users{ .id = 21, .age = 4, .name = "Karl", .stats = Stats{ .wins = 3, .losses = 1 }, .cards = cards2[0..] });
+    var user = Users{ .id = 1, .age = 3, .name = "Karl", .stats = Stats{ .wins = 0, .losses = 5 }, .cards = cards[0..] };
+    var user2 = Users{ .id = 1, .age = 3, .name = "Steve", .stats = Stats{ .wins = 0, .losses = 5 }, .cards = null };
+    _ = try db.insert(&user);
+    _ = try db.insert(&user2);
 
     var user_result = Users{};
+
     defer allocator.free(user_result.cards.?);
 
     //Find data from database

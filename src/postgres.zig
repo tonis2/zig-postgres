@@ -59,39 +59,61 @@ pub const Pg = struct {
         switch (type_info) {
             .Pointer => {
                 const pointer_info = @typeInfo(type_info.Pointer.child);
+
                 if (pointer_info == .Array) {
                     // For each item in inserted array
                     for (data) |child, child_index| {
-
                         //Set table name as first items struct name.
                         if (child_index == 0) {
                             const struct_name = @typeName(@TypeOf(child));
                             try builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
                         }
-
+                        
                         const struct_fields = @typeInfo(@TypeOf(child)).Struct.fields;
+                        const is_extended = @hasDecl(@TypeOf(child), "onSave");
 
                         inline for (struct_fields) |field, index| {
 
                             //Add first child struct keys as column values
                             if (child_index == 0) try builder.addColumn(field.name);
 
-                            const field_value = @field(child, field.name);
-
-                            builder.autoAdd(child, FieldInfo{ .name = field.name, .type = field.field_type }, field_value) catch unreachable;
+                            builder.autoAdd(child, FieldInfo{ .name = field.name, .type = field.field_type }, @field(child, field.name), is_extended) catch unreachable;
                         }
+                    }
+                }
+                if (pointer_info == .Struct) {
+                    //Struct pointer
+                    const struct_info = @typeInfo(type_info.Pointer.child).Struct;
+                    const struct_name = @typeName(type_info.Pointer.child);
+                    const is_extended = @hasDecl(type_info.Pointer.child, "onSave");
+
+                    try builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
+
+                    inline for (struct_info.fields) |field, index| {
+                        const field_type_info = @typeInfo(field.field_type);
+                        const field_value = @field(data, field.name);
+
+                        if (field_type_info == .Optional) {
+                            if (field_value != null) {
+                                try builder.addColumn(field.name);
+                            }
+                        } else {
+                            try builder.addColumn(field.name);
+                        }
+
+                        builder.autoAdd(data, FieldInfo{ .name = field.name, .type = field.field_type }, field_value, is_extended) catch unreachable;
                     }
                 }
             },
             .Struct => {
                 const struct_info = @typeInfo(@TypeOf(data)).Struct;
                 const struct_name = @typeName(@TypeOf(data));
+                const is_extended = @hasDecl(@TypeOf(data), "onSave");
 
                 try builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
                 inline for (struct_info.fields) |field, index| {
-                    const field_value = @field(data, field.name);
                     const field_type_info = @typeInfo(field.field_type);
-
+                    const field_value = @field(data, field.name);
                     if (field_type_info == .Optional) {
                         if (field_value != null) {
                             try builder.addColumn(field.name);
@@ -100,14 +122,13 @@ pub const Pg = struct {
                         try builder.addColumn(field.name);
                     }
 
-                    builder.autoAdd(data, FieldInfo{ .name = field.name, .type = field.field_type }, field_value) catch unreachable;
+                    builder.autoAdd(data, FieldInfo{ .name = field.name, .type = field.field_type }, field_value, is_extended) catch unreachable;
                 }
             },
             else => {},
         }
 
         try builder.end();
-
         //Exec command
         return try self.exec(builder.command());
     }
@@ -259,4 +280,3 @@ test "database" {
 
     _ = try db.exec("DROP TABLE users");
 }
-
