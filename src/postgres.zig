@@ -78,7 +78,7 @@ pub const Pg = struct {
 
                             const field_value = @field(child, field.name);
 
-                            try builder.autoAdd(child, FieldInfo{ .name = field.name, .type = field.field_type }, field_value);
+                            builder.autoAdd(child, FieldInfo{ .name = field.name, .type = field.field_type }, field_value) catch unreachable;
                         }
                     }
                 }
@@ -100,7 +100,7 @@ pub const Pg = struct {
                         try builder.addColumn(field.name);
                     }
 
-                    try builder.autoAdd(data, FieldInfo{ .name = field.name, .type = field.field_type }, field_value);
+                    builder.autoAdd(data, FieldInfo{ .name = field.name, .type = field.field_type }, field_value) catch unreachable;
                 }
             },
             else => {},
@@ -259,3 +259,4 @@ test "database" {
 
     _ = try db.exec("DROP TABLE users");
 }
+

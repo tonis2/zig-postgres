@@ -78,7 +78,7 @@ pub const Builder = struct {
                     try self.addStringValue(field_value.?);
             },
             else => {
-                if (is_extended) try @field(struct_info, "onSave")(field_info, self);
+                if (is_extended) try @field(struct_info, "onSave")(field_info, self, field_value);
             },
         }
     }

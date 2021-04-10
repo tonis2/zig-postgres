@@ -12,24 +12,26 @@ const ArrayList = std.ArrayList;
 const Utf8View = std.unicode.Utf8View;
 const Allocator = std.mem.Allocator;
 
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const allocator = &gpa.allocator;
+
 const Stats = struct { wins: u16, losses: u16 };
 
 const Users = struct {
     id: u16 = 0,
     name: []const u8 = "",
     age: u16 = 0,
-    cards: ArrayList([]const u8),
+    cards: ?[][]const u8 = null,
     stats: Stats = Stats{ .wins = 0, .losses = 0 },
 
-    pub fn onSave(self: *const Users, comptime field: FieldInfo, builder: *Builder) !void {
+    pub fn onSave(self: *const Users, comptime field: FieldInfo, builder: *Builder, value: anytype) !void {
         switch (field.type) {
-            ArrayList([]const u8) => {
-                // Create ARRAY[value, value] string
+            ?[][]const u8 => {
+                // Create ARRAY[value, value]
                 _ = try builder.buffer.writer().write("ARRAY[");
-                for (self.cards.items) |value, i| _ = {
-                    _ = try builder.buffer.writer().write(try std.fmt.allocPrint(builder.allocator, "'{s}'", .{value}));
-                    if (i < self.cards.items.len - 1)
-                        _ = try builder.buffer.writer().write(",");
+                for (value.?) |entry, i| _ = {
+                    _ = try builder.buffer.writer().write(try std.fmt.allocPrint(builder.allocator, "'{s}'", .{entry}));
+                    if (i < value.?.len - 1) _ = try builder.buffer.writer().write(",");
                 };
                 _ = try builder.buffer.writer().write("]");
 
@@ -49,23 +51,25 @@ const Users = struct {
         }
     }
 
-    pub fn onLoad(self: *Users, comptime field: FieldInfo, value: []const u8, allocator: *Allocator) !void {
+    pub fn onLoad(self: *Users, comptime field: FieldInfo, value: []const u8) !void {
         switch (field.type) {
-            ArrayList([]const u8) => {
-                // Parse ARRAY[value, value] to values and append these values to ArrayList
+            ?[][]const u8 => {
+                var buffer = ArrayList([]const u8).init(allocator);
+
                 const parser = try Utf8View.init(value);
                 var iterator = parser.iterator();
                 var pause: usize = 1;
                 while (iterator.nextCodepointSlice()) |char| {
                     if (std.mem.eql(u8, ",", iterator.peek(1))) {
-                        try self.cards.append(value[pause..iterator.i]);
+                        try buffer.append(value[pause..iterator.i]);
                         pause = iterator.i + 1;
                     }
                     if (std.mem.eql(u8, "}", iterator.peek(1))) {
-                        try self.cards.append(value[pause..iterator.i]);
+                        try buffer.append(value[pause..iterator.i]);
                         pause = iterator.i + 1;
                     }
                 }
+                self.cards = buffer.toOwnedSlice();
             },
             Stats => {
                 //Convert json string to struct
@@ -77,9 +81,6 @@ const Users = struct {
 };
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = &gpa.allocator;
-
     var db = try Pg.connect(allocator, build_options.db_uri);
 
     defer {
@@ -100,29 +101,27 @@ pub fn main() !void {
         "Queen",
     };
 
+    var cards2 = [3][]const u8{
+        "3",
+        "5",
+        "Jocker",
+    };
+
     //Save data to db
-    _ = try db.insert(Users{ .id = 1, .age = 3, .name = "Steve", .stats = Stats{ .wins = 0, .losses = 5 }, .cards = ArrayList([]const u8).fromOwnedSlice(allocator, cards[0..]) });
-    _ = try db.insert(Users{ .id = 21, .age = 4, .name = "Karl", .stats = Stats{ .wins = 3, .losses = 1 }, .cards = ArrayList([]const u8).fromOwnedSlice(allocator, cards[0..]) });
+    _ = try db.insert(Users{ .id = 1, .age = 3, .name = "Steve", .stats = Stats{ .wins = 0, .losses = 5 }, .cards = cards[0..] });
+    _ = try db.insert(Users{ .id = 21, .age = 4, .name = "Karl", .stats = Stats{ .wins = 3, .losses = 1 }, .cards = cards2[0..] });
 
-    var user_result = Users{ .cards = ArrayList([]const u8).init(allocator) };
-    defer user_result.cards.deinit();
-
-    var result = try db.execValues("SELECT * FROM users WHERE name = {s};", .{"Steve"});
-
-    try result.parseTo(&user_result);
-
-    user_result.cards.shrinkAndFree(0);
+    var user_result = Users{};
+    defer allocator.free(user_result.cards.?);
 
     //Find data from database
-    var result2 = try db.execValues("SELECT * FROM users WHERE name = {s};", .{"Karl"});
-    try result2.parseTo(&user_result);
+    var result = try db.execValues("SELECT * FROM users WHERE name = {s};", .{"Karl"});
+    try result.parseTo(&user_result);
 
     print("id {d} \n", .{user_result.id});
     print("name {s} \n", .{user_result.name});
     print("wins {d} \n", .{user_result.stats.wins});
+    print("cards {s} \n", .{user_result.cards.?});
 
-    for (user_result.cards.items) |value| {
-        print("card {s} \n", .{value});
-    }
     _ = try db.exec("DROP TABLE users");
 }
