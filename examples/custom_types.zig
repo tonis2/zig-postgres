@@ -27,7 +27,6 @@ const Users = struct {
     pub fn onSave(self: *Users, comptime field: FieldInfo, builder: *Builder, value: anytype) !void {
         switch (field.type) {
             ?[][]const u8 => {
-                if (value == null) return;
                 // Create ARRAY[value, value]
                 _ = try builder.buffer.writer().write("ARRAY[");
                 for (value.?) |entry, i| _ = {
