@@ -1,6 +1,5 @@
 const std = @import("std");
 
-
 const print = std.debug.print;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
@@ -64,8 +63,7 @@ pub const Builder = struct {
     }
 
     pub fn autoAdd(self: *Builder, struct_info: anytype, comptime field_info: FieldInfo, field_value: anytype, extended: bool) !void {
-      
-
+        if (@typeInfo(field_info.type) == .Optional and field_value == null) return;
         switch (field_info.type) {
             i16, i32, u8, u16, u32, usize => {
                 try self.addNumValue(field_value);
@@ -74,8 +72,7 @@ pub const Builder = struct {
                 try self.addStringValue(field_value);
             },
             ?[]const u8 => {
-                if (field_value != null)
-                    try self.addStringValue(field_value.?);
+                try self.addStringValue(field_value.?);
             },
             else => {
                 if (extended) try @field(struct_info, "onSave")(field_info, self, field_value);

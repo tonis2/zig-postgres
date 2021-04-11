@@ -131,7 +131,7 @@ pub const Result = struct {
             const column_name = self.columnName(col_id);
             const column_type = self.getType(col_id);
             const value: []const u8 = self.getValue(self.active_row, col_id);
-
+            if (value.len == 0) break;
             inline for (struct_info.fields) |field| {
                 if (std.mem.eql(u8, field.name, column_name)) {
                     switch (field.field_type) {

@@ -68,16 +68,22 @@ pub const Pg = struct {
                             const struct_name = @typeName(@TypeOf(child));
                             try builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
                         }
-                        
+
                         const struct_fields = @typeInfo(@TypeOf(child)).Struct.fields;
+
                         const is_extended = @hasDecl(@TypeOf(child), "onSave");
 
                         inline for (struct_fields) |field, index| {
-
+                            const field_type_info = @typeInfo(field.field_type);
+                            const field_value = @field(child, field.name);
                             //Add first child struct keys as column values
-                            if (child_index == 0) try builder.addColumn(field.name);
 
-                            builder.autoAdd(child, FieldInfo{ .name = field.name, .type = field.field_type }, @field(child, field.name), is_extended) catch unreachable;
+                            if (field_type_info == .Optional) {
+                                if (field_value != null) try builder.addColumn(field.name);
+                            } else if (child_index == 0) {
+                                try builder.addColumn(field.name);
+                            }
+                            builder.autoAdd(child, FieldInfo{ .name = field.name, .type = field.field_type }, field_value, is_extended) catch unreachable;
                         }
                     }
                 }
@@ -92,11 +98,8 @@ pub const Pg = struct {
                     inline for (struct_info.fields) |field, index| {
                         const field_type_info = @typeInfo(field.field_type);
                         const field_value = @field(data, field.name);
-
                         if (field_type_info == .Optional) {
-                            if (field_value != null) {
-                                try builder.addColumn(field.name);
-                            }
+                            if (field_value != null) try builder.addColumn(field.name);
                         } else {
                             try builder.addColumn(field.name);
                         }
@@ -114,10 +117,9 @@ pub const Pg = struct {
                 inline for (struct_info.fields) |field, index| {
                     const field_type_info = @typeInfo(field.field_type);
                     const field_value = @field(data, field.name);
+
                     if (field_type_info == .Optional) {
-                        if (field_value != null) {
-                            try builder.addColumn(field.name);
-                        }
+                        if (field_value != null) try builder.addColumn(field.name);
                     } else {
                         try builder.addColumn(field.name);
                     }
