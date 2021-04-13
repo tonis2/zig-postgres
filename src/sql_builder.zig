@@ -49,17 +49,23 @@ pub const Builder = struct {
         try self.values.append(value);
     }
 
-    pub fn addStringArray(self: *Builder, values: ArrayList([]const u8)) !void {
+    pub fn addStringArray(self: *Builder, values: [][]const u8) !void {
         _ = try self.buffer.writer().write("ARRAY[");
-        for (values.items) |value, i| _ = {
-            _ = try self.buffer.writer().write(try std.fmt.allocPrint(self.allocator, "'{s}'", .{value}));
-            if (i < values.items.len - 1)
-                _ = try self.buffer.writer().write(",");
+        for (values) |entry, i| _ = {
+            _ = try self.buffer.writer().write(try std.fmt.allocPrint(self.allocator, "'{s}'", .{entry}));
+            if (i < values.len - 1) _ = try self.buffer.writer().write(",");
         };
         _ = try self.buffer.writer().write("]");
-
         try self.values.append(self.buffer.toOwnedSlice());
-        self.buffer.shrinkAndFree(0);
+    }
+
+    pub fn addJson(self: *Builder, data: anytype) !void {
+        _ = try self.buffer.writer().write("('");
+        var buffer = std.ArrayList(u8).init(self.allocator);
+        try std.json.stringify(data, .{}, buffer.writer());
+        _ = try self.buffer.writer().write(buffer.toOwnedSlice());
+        _ = try self.buffer.writer().write("')");
+        _ = try self.values.append(self.buffer.toOwnedSlice());
     }
 
     pub fn autoAdd(self: *Builder, struct_info: anytype, comptime field_info: FieldInfo, field_value: anytype, extended: bool) !void {

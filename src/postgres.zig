@@ -6,6 +6,7 @@ pub const c = @cImport({
 const build_options = @import("build_options");
 
 pub const Builder = @import("./sql_builder.zig").Builder;
+pub const Parser = @import("./parser.zig");
 pub const FieldInfo = Definitions.FieldInfo;
 
 const helpers = @import("./helpers.zig");
@@ -70,14 +71,13 @@ pub const Pg = struct {
                         }
 
                         const struct_fields = @typeInfo(@TypeOf(child)).Struct.fields;
-
                         const is_extended = @hasDecl(@TypeOf(child), "onSave");
 
                         inline for (struct_fields) |field, index| {
                             const field_type_info = @typeInfo(field.field_type);
                             const field_value = @field(child, field.name);
-                            //Add first child struct keys as column values
 
+                            //Add first child struct keys as column value
                             if (field_type_info == .Optional) {
                                 if (field_value != null) try builder.addColumn(field.name);
                             } else if (child_index == 0) {
@@ -141,7 +141,7 @@ pub const Pg = struct {
 
         var res: ?*c.PGresult = c.PQexec(self.connection, cstr_query);
         var response_code = @enumToInt(c.PQresultStatus(res));
-        var err: ?Error = null;
+
         if (response_code != c.PGRES_TUPLES_OK and response_code != c.PGRES_COMMAND_OK and response_code != c.PGRES_NONFATAL_ERROR) {
             std.debug.warn("Error {s}\n", .{c.PQresultErrorMessage(res)});
             c.PQclear(res);
@@ -216,69 +216,3 @@ pub const Pg = struct {
         c.PQfinish(self.connection);
     }
 };
-
-const testing = std.testing;
-
-test "database" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = &gpa.allocator;
-    var db = try Pg.connect(allocator, build_options.db_uri);
-
-    defer {
-        std.debug.assert(!gpa.deinit());
-        db.deinit();
-    }
-
-    const Users = struct {
-        id: u16,
-        name: []const u8,
-        age: u16,
-    };
-
-    const schema =
-        \\CREATE DATABASE IF NOT EXISTS root;
-        \\CREATE TABLE IF NOT EXISTS users (id INT, name TEXT, age INT);
-    ;
-
-    _ = try db.exec(schema);
-
-    _ = try db.insert(Users{ .id = 1, .name = "Charlie", .age = 20 });
-    _ = try db.insert(Users{ .id = 2, .name = "Steve", .age = 25 });
-    _ = try db.insert(Users{ .id = 3, .name = "Tom", .age = 25 });
-
-    var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
-    var result2 = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
-    var result3 = try db.execValues("SELECT * FROM users WHERE age = {d}", .{25});
-
-    var user = result.parse(Users).?;
-    var user2 = result2.parse(Users).?;
-
-    while (result3.parse(Users)) |data| testing.expectEqual(data.age, 25);
-
-    _ = try db.insert(&[_]Users{
-        Users{ .id = 4, .name = "Tony", .age = 33 },
-        Users{ .id = 5, .name = "Sara", .age = 33 },
-        Users{ .id = 6, .name = "Tony", .age = 33 },
-    });
-
-    var result4 = try db.execValues("SELECT * FROM users WHERE age = {d}", .{33});
-    defer result4.deinit();
-
-    var user3 = result4.parse(Users).?;
-
-    testing.expectEqual(result.rows, 1);
-    testing.expectEqual(result2.rows, 1);
-    testing.expectEqual(result3.rows, 2);
-
-    testing.expectEqual(user.id, 1);
-    testing.expectEqual(user.age, 20);
-
-    testing.expectEqual(user3.id, 4);
-    testing.expectEqualStrings(user3.name, "Tony");
-
-    testing.expectEqual(user2.id, 2);
-    testing.expectEqualStrings(user2.name, "Steve");
-    testing.expectEqual(result4.rows, 3);
-
-    _ = try db.exec("DROP TABLE users");
-}

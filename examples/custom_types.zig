@@ -7,74 +7,34 @@ const Pg = Postgres.Pg;
 const Result = Postgres.Result;
 const Builder = Postgres.Builder;
 const FieldInfo = Postgres.FieldInfo;
+const Parser = Postgres.Parser;
 
 const ArrayList = std.ArrayList;
-const Utf8View = std.unicode.Utf8View;
 const Allocator = std.mem.Allocator;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = &gpa.allocator;
 
-const Stats = struct { wins: u16, losses: u16 };
-
-const Users = struct {
-    id: u16 = 0,
-    name: []const u8 = "",
-    age: u16 = 0,
+const Stats = struct { wins: u16 = 0, losses: u16 = 0 };
+const Player = struct {
+    id: u16,
+    name: []const u8,
+    stats: Stats,
     cards: ?[][]const u8 = null,
-    stats: Stats = Stats{ .wins = 0, .losses = 0 },
 
-    pub fn onSave(self: *Users, comptime field: FieldInfo, builder: *Builder, value: anytype) !void {
+    pub fn onSave(self: *Player, comptime field: FieldInfo, builder: *Builder, value: anytype) !void {
         switch (field.type) {
-            ?[][]const u8 => {
-                // Create ARRAY[value, value]
-                _ = try builder.buffer.writer().write("ARRAY[");
-                for (value.?) |entry, i| _ = {
-                    _ = try builder.buffer.writer().write(try std.fmt.allocPrint(builder.allocator, "'{s}'", .{entry}));
-                    if (i < value.?.len - 1) _ = try builder.buffer.writer().write(",");
-                };
-                _ = try builder.buffer.writer().write("]");
-
-                // Append ARRAY string to SQL builder as value
-                try builder.values.append(builder.buffer.toOwnedSlice());
-            },
-            Stats => {
-                //Convert stats to json and push to builder values
-                _ = try builder.buffer.writer().write("('");
-                var buffer = std.ArrayList(u8).init(builder.allocator);
-                try std.json.stringify(self.stats, .{}, buffer.writer());
-                _ = try builder.buffer.writer().write(buffer.toOwnedSlice());
-                _ = try builder.buffer.writer().write("')");
-                _ = try builder.values.append(builder.buffer.toOwnedSlice());
-            },
+            ?[][]const u8 => try builder.addStringArray(value.?),
+            Stats => try builder.addJson(value),
             else => {},
         }
     }
 
-    pub fn onLoad(self: *Users, comptime field: FieldInfo, value: []const u8) !void {
+    pub fn onLoad(self: *Player, comptime field: FieldInfo, value: []const u8) !void {
+        var parser = Parser.init(allocator);
         switch (field.type) {
-            ?[][]const u8 => {
-                var buffer = ArrayList([]const u8).init(allocator);
-
-                const parser = try Utf8View.init(value);
-                var iterator = parser.iterator();
-                var pause: usize = 1;
-                while (iterator.nextCodepointSlice()) |char| {
-                    if (std.mem.eql(u8, ",", iterator.peek(1))) {
-                        try buffer.append(value[pause..iterator.i]);
-                        pause = iterator.i + 1;
-                    }
-                    if (std.mem.eql(u8, "}", iterator.peek(1))) {
-                        try buffer.append(value[pause..iterator.i]);
-                        pause = iterator.i + 1;
-                    }
-                }
-                self.cards = buffer.toOwnedSlice();
-            },
-            Stats => {
-                //Convert json string to struct
-                self.stats = try std.json.parse(Stats, &std.json.TokenStream.init(value), .{ .allocator = allocator });
-            },
+            ?[][]const u8 => self.cards = try parser.parseArray(value),
+            Stats => self.stats = try parser.parseJson(Stats, value),
             else => {},
         }
     }
@@ -90,7 +50,7 @@ pub fn main() !void {
 
     const schema =
         \\CREATE DATABASE IF NOT EXISTS root;
-        \\CREATE TABLE IF NOT EXISTS users (id INT, name TEXT, age INT, cards STRING[], stats JSONB);
+        \\CREATE TABLE IF NOT EXISTS player (id INT, name TEXT, stats JSONB, cards STRING[]);
     ;
 
     _ = try db.exec(schema);
@@ -101,30 +61,19 @@ pub fn main() !void {
         "Queen",
     };
 
-    var cards2 = [3][]const u8{
-        "3",
-        "5",
-        "Jocker",
-    };
+    var data = Player{ .id = 2, .name = "Steve", .stats = .{ .wins = 5, .losses = 3 }, .cards = cards[0..] };
+    _ = try db.insert(&data);
 
-    //Save data to db
-    var user = Users{ .id = 1, .age = 3, .name = "Karl", .stats = Stats{ .wins = 0, .losses = 5 }, .cards = cards[0..] };
-    var user2 = Users{ .id = 1, .age = 3, .name = "Steve", .stats = Stats{ .wins = 0, .losses = 5 }, .cards = null };
-    _ = try db.insert(&user);
-    _ = try db.insert(&user2);
+    var data_cache: Player = undefined;
+    defer allocator.free(data_cache.cards.?);
 
-    var user_result = Users{};
+    var result = try db.execValues("SELECT * FROM player WHERE name = {s}", .{"Steve"});
+    try result.parseTo(&data_cache);
 
-    defer allocator.free(user_result.cards.?);
+    print("id {d} \n", .{data_cache.id});
+    print("name {s} \n", .{data_cache.name});
+    print("wins {d} \n", .{data_cache.stats.wins});
+    print("cards {s} \n", .{data_cache.cards.?});
 
-    //Find data from database
-    var result = try db.execValues("SELECT * FROM users WHERE name = {s};", .{"Karl"});
-    try result.parseTo(&user_result);
-
-    print("id {d} \n", .{user_result.id});
-    print("name {s} \n", .{user_result.name});
-    print("wins {d} \n", .{user_result.stats.wins});
-    print("cards {s} \n", .{user_result.cards.?});
-
-    _ = try db.exec("DROP TABLE users");
+    _ = try db.exec("DROP TABLE player");
 }
