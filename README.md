@@ -112,7 +112,7 @@ _ = try db.execValues("INSERT INTO users (id, name, age) VALUES ({d}, {s}, {d})"
 
 ```zig
 var result = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
-var user = result.parse(Users).?;
+var user = result.parse(.{ .type = Users }).?;
 
 print("{d} \n", .{user.id});
 print("{s} \n", .{user.name});
@@ -123,14 +123,14 @@ print("{s} \n", .{user.name});
 ```zig
 var results = try db.execValues("SELECT * FROM users WHERE age = {d}", .{25});
 
-while (results.parse(Users)) |user| {
+while (results.parse(.{ .type = Users })) |user| {
     print("{s} \n", .{user.name});
 }
 ```
 
 ```zig
 var result = try db.execValues("SELECT * FROM users WHERE name = {s}", .{"Charlie"});
-var user = result.parse(Users);
+var user = result.parse(.{ .type = Users }).?;
 
 if(user) print("{s} \n", .{user.name});
 ```
