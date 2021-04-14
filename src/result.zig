@@ -111,9 +111,7 @@ pub const Result = struct {
                         },
                         else => {
                             const is_extended = @hasDecl(params.type, "onLoad");
-                            if (is_extended) @field(result, "onLoad")(FieldInfo{ .name = field.name, .type = field.field_type }, value, Parser.init(params.allocator.?)) catch |err| {
-                                std.debug.warn("onLoad failed with {} \n", .{err});
-                            };
+                            if (is_extended) @field(result, "onLoad")(FieldInfo{ .name = field.name, .type = field.field_type }, value, Parser.init(params.allocator.?)) catch unreachable;
                         },
                     }
                 }
