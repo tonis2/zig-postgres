@@ -54,11 +54,11 @@ test "database" {
     //When all results are not parsed, the memory must be manually deinited
     defer result4.deinit();
 
-    var user = result.parse(Users).?;
-    var user2 = result2.parse(Users).?;
-    var user3 = result4.parse(Users).?;
+    var user = result.parse(.{ .type = Users }).?;
+    var user2 = result2.parse(.{ .type = Users }).?;
+    var user3 = result4.parse(.{ .type = Users }).?;
 
-    while (result3.parse(Users)) |res| testing.expectEqual(res.age, 25);
+    while (result3.parse(.{ .type = Users })) |res| testing.expectEqual(res.age, 25);
 
     testing.expectEqual(result.rows, 1);
     testing.expectEqual(result2.rows, 1);
@@ -92,8 +92,7 @@ const Player = struct {
         }
     }
 
-    pub fn onLoad(self: *Player, comptime field: FieldInfo, value: []const u8) !void {
-        var parser = Parser.init(allocator);
+    pub fn onLoad(self: *Player, comptime field: FieldInfo, value: []const u8, parser: Parser) !void {
         switch (field.type) {
             ?[][]const u8 => self.cards = try parser.parseArray(value),
             Stats => self.stats = try parser.parseJson(Stats, value),
@@ -126,9 +125,8 @@ test "Custom types" {
     var data = Player{ .id = 2, .name = "Steve", .stats = .{ .wins = 5, .losses = 3 }, .cards = cards[0..] };
     _ = try db.insert(&data);
 
-    var data_cache: Player = undefined;
     var result = try db.execValues("SELECT * FROM player WHERE name = {s}", .{"Steve"});
-    try result.parseTo(&data_cache);
+    var data_cache = result.parse(.{ .type = Player, .allocator = allocator }).?;
 
     testing.expectEqual(data_cache.id, 2);
     testing.expectEqualStrings(data_cache.name, "Steve");

@@ -13,11 +13,11 @@ pub fn init(allocator: *Allocator) Self {
     };
 }
 
-pub fn parseJson(self: *Self, comptime T: type, value: []const u8) !T {
+pub fn parseJson(self: *const Self, comptime T: type, value: []const u8) !T {
     return try std.json.parse(T, &std.json.TokenStream.init(value), .{ .allocator = self.allocator });
 }
 
-pub fn parseArray(self: *Self, value: []const u8) ![][]const u8 {
+pub fn parseArray(self: *const Self, value: []const u8) ![][]const u8 {
     var buffer = std.ArrayList([]const u8).init(self.allocator);
 
     const parser = try Utf8View.init(value);

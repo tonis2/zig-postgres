@@ -30,8 +30,7 @@ const Player = struct {
         }
     }
 
-    pub fn onLoad(self: *Player, comptime field: FieldInfo, value: []const u8) !void {
-        var parser = Parser.init(allocator);
+    pub fn onLoad(self: *Player, comptime field: FieldInfo, value: []const u8, parser: Parser) !void {
         switch (field.type) {
             ?[][]const u8 => self.cards = try parser.parseArray(value),
             Stats => self.stats = try parser.parseJson(Stats, value),
@@ -64,11 +63,9 @@ pub fn main() !void {
     var data = Player{ .id = 2, .name = "Steve", .stats = .{ .wins = 5, .losses = 3 }, .cards = cards[0..] };
     _ = try db.insert(&data);
 
-    var data_cache: Player = undefined;
-    defer allocator.free(data_cache.cards.?);
-
     var result = try db.execValues("SELECT * FROM player WHERE name = {s}", .{"Steve"});
-    try result.parseTo(&data_cache);
+    var data_cache = result.parse(.{ .type = Player, .allocator = allocator }).?;
+    defer allocator.free(data_cache.cards.?);
 
     print("id {d} \n", .{data_cache.id});
     print("name {s} \n", .{data_cache.name});
