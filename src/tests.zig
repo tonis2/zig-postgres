@@ -94,7 +94,7 @@ const Player = struct {
 
     pub fn onLoad(self: *Player, comptime field: FieldInfo, value: []const u8, parser: Parser) !void {
         switch (field.type) {
-            ?[][]const u8 => self.cards = try parser.parseArray(value),
+            ?[][]const u8 => self.cards = try parser.parseArray(value, ","),
             Stats => self.stats = try parser.parseJson(Stats, value),
             else => {},
         }

@@ -32,7 +32,7 @@ const Player = struct {
 
     pub fn onLoad(self: *Player, comptime field: FieldInfo, value: []const u8, parser: Parser) !void {
         switch (field.type) {
-            ?[][]const u8 => self.cards = try parser.parseArray(value),
+            ?[][]const u8 => self.cards = try parser.parseArray(value, ","),
             Stats => self.stats = try parser.parseJson(Stats, value),
             else => {},
         }
@@ -60,17 +60,23 @@ pub fn main() !void {
         "Queen",
     };
 
-    var data = Player{ .id = 2, .name = "Steve", .stats = .{ .wins = 5, .losses = 3 }, .cards = cards[0..] };
+    var data = Player{ .id = 1, .name = "Steve", .stats = .{ .wins = 3, .losses = 2 }, .cards = cards[0..] };
+    var data2 = Player{ .id = 2, .name = "Karl", .stats = .{ .wins = 3, .losses = 2 }, .cards = null };
+
     _ = try db.insert(&data);
+    _ = try db.insert(&data2);
 
     var result = try db.execValues("SELECT * FROM player WHERE name = {s}", .{"Steve"});
-    var data_cache = result.parse(.{ .type = Player, .allocator = allocator }).?;
-    defer allocator.free(data_cache.cards.?);
 
-    print("id {d} \n", .{data_cache.id});
-    print("name {s} \n", .{data_cache.name});
-    print("wins {d} \n", .{data_cache.stats.wins});
-    print("cards {s} \n", .{data_cache.cards.?});
+    while (result.parse(.{ .type = Player, .allocator = allocator })) |res| {
+        print("id {d} \n", .{res.id});
+        print("name {s} \n", .{res.name});
+        print("wins {d} \n", .{res.stats.wins});
+        for (res.cards.?) |card| {
+            print("card {s} \n", .{card});
+        }
+        defer allocator.free(res.cards.?);
+    }
 
     _ = try db.exec("DROP TABLE player");
 }
