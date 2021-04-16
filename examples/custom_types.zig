@@ -68,7 +68,7 @@ pub fn main() !void {
 
     var result = try db.execValues("SELECT * FROM player WHERE name = {s}", .{"Steve"});
 
-    while (result.parse(.{ .type = Player, .allocator = allocator })) |res| {
+    while (result.parse(Player, allocator)) |res| {
         print("id {d} \n", .{res.id});
         print("name {s} \n", .{res.name});
         print("wins {d} \n", .{res.stats.wins});

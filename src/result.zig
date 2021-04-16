@@ -13,11 +13,6 @@ const Definitions = @import("./definitions.zig");
 const Error = Definitions.Error;
 const FieldInfo = Definitions.FieldInfo;
 
-const ResultParams = struct {
-    type: type,
-    allocator: ?*Allocator = null,
-};
-
 pub const Result = struct {
     res: ?*c.PGresult,
     columns: usize,
@@ -64,11 +59,11 @@ pub const Result = struct {
     }
 
     //Parses and returns struct with values
-    pub fn parse(self: *Result, comptime params: ResultParams) ?params.type {
+    pub fn parse(self: *Result, comptime return_type: type, allocator: ?*Allocator) ?return_type {
         if (self.rows < 1) return null;
         if (self.active_row == self.rows) return null;
 
-        const type_info = @typeInfo(params.type);
+        const type_info = @typeInfo(return_type);
 
         if (type_info != .Struct) {
             @compileError("Need to use struct as parser type");
@@ -76,7 +71,7 @@ pub const Result = struct {
 
         const struct_fields = type_info.Struct.fields;
 
-        var result: params.type = undefined;
+        var result: return_type = undefined;
 
         var col_id: usize = 0;
         while (col_id < self.columns) : (col_id += 1) {
@@ -110,8 +105,9 @@ pub const Result = struct {
                             @field(result, field.name) = value;
                         },
                         else => {
-                            const is_extended = @hasDecl(params.type, "onLoad");
-                            if (is_extended) @field(result, "onLoad")(FieldInfo{ .name = field.name, .type = field.field_type }, value, Parser.init(params.allocator.?)) catch unreachable;
+                            const is_extended = @hasDecl(return_type, "onLoad");
+
+                            if (is_extended) @field(result, "onLoad")(FieldInfo{ .name = field.name, .type = field.field_type }, value, Parser.init(allocator.?)) catch unreachable;
                         },
                     }
                 }

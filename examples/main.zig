@@ -41,13 +41,13 @@ pub fn main() !void {
 
     var result = try db.execValues("SELECT * FROM users WHERE name = {s};", .{"Charlie"});
 
-    var user = result.parse(.{ .type = Users });
+    var user = result.parse(Users, null);
 
     if (user) |value| print("{s} \n", .{value.name});
 
     var result2 = try db.execValues("SELECT * FROM users WHERE age > {d};", .{20});
 
-    while (result2.parse(.{ .type = Users })) |value| {
+    while (result2.parse(Users, null)) |value| {
         print("{s} \n", .{value.name});
     }
 

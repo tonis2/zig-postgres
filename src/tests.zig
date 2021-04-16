@@ -54,11 +54,11 @@ test "database" {
     //When all results are not parsed, the memory must be manually deinited
     defer result4.deinit();
 
-    var user = result.parse(.{ .type = Users }).?;
-    var user2 = result2.parse(.{ .type = Users }).?;
-    var user3 = result4.parse(.{ .type = Users }).?;
+    var user = result.parse(Users, null).?;
+    var user2 = result2.parse(Users, null).?;
+    var user3 = result4.parse(Users, null).?;
 
-    while (result3.parse(.{ .type = Users })) |res| testing.expectEqual(res.age, 25);
+    while (result3.parse(Users, null)) |res| testing.expectEqual(res.age, 25);
 
     testing.expectEqual(result.rows, 1);
     testing.expectEqual(result2.rows, 1);
@@ -126,7 +126,7 @@ test "Custom types" {
     _ = try db.insert(&data);
 
     var result = try db.execValues("SELECT * FROM player WHERE name = {s}", .{"Steve"});
-    var data_cache = result.parse(.{ .type = Player, .allocator = allocator }).?;
+    var data_cache = result.parse(Player, allocator).?;
 
     testing.expectEqual(data_cache.id, 2);
     testing.expectEqualStrings(data_cache.name, "Steve");
