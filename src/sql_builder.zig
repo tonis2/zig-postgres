@@ -3,6 +3,7 @@ const std = @import("std");
 const print = std.debug.print;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
+const helpers = @import("./helpers.zig");
 
 const Definitions = @import("./definitions.zig");
 const Error = Definitions.Error;
@@ -15,6 +16,7 @@ pub const Builder = struct {
     buffer: ArrayList(u8),
     columns: ArrayList([]const u8),
     values: ArrayList([]const u8),
+    where_clause: ?[]const u8 = null,
     allocator: *Allocator,
     build_type: SQL,
 
@@ -29,8 +31,12 @@ pub const Builder = struct {
         };
     }
 
-    pub fn table(self: *Builder, table_name: []const u8) !void {
+    pub fn table(self: *Builder, table_name: []const u8) void {
         self.table_name = table_name;
+    }
+
+    pub fn where(self: *Builder, query: []const u8) !void {
+        self.where_clause = query;
     }
 
     pub fn addColumn(self: *Builder, column_name: []const u8) !void {
@@ -127,6 +133,37 @@ pub const Builder = struct {
                     }
                 }
             },
+            .Update => {
+                if (self.columns.items.len != self.values.items.len) {
+                    std.debug.warn("Columns and Values must match in length \n", .{});
+                    return Error.QueryFailure;
+                }
+
+                if (self.where_clause == null) {
+                    std.debug.warn("Where clause must be set \n", .{});
+                    return Error.QueryFailure;
+                }
+
+                _ = try self.buffer.writer().write("UPDATE ");
+                _ = try self.buffer.writer().write(self.table_name);
+                _ = try self.buffer.writer().write(" SET ");
+
+                for (self.columns.items) |column, index| {
+                    const final_value = index == self.columns.items.len - 1;
+
+                    _ = try self.buffer.writer().write(column);
+                    _ = try self.buffer.writer().write("=");
+                    _ = try self.buffer.writer().write(self.values.items[index]);
+
+                    if (!final_value) {
+                        _ = try self.buffer.writer().write(",");
+                    } else {
+                        _ = try self.buffer.writer().write(" ");
+                    }
+                }
+
+                _ = try self.buffer.writer().write(self.where_clause.?);
+            },
             else => {
                 return Error.NotImplemented;
             },
@@ -153,7 +190,7 @@ test "database" {
 
     var builder = try Builder.new(.Insert, allocator);
 
-    try builder.table("test");
+    builder.table("test");
     try builder.addColumn("id");
     try builder.addColumn("name");
     try builder.addColumn("age");
@@ -168,7 +205,7 @@ test "database" {
     builder.deinit();
 
     var builder2 = try Builder.new(.Insert, allocator);
-    try builder2.table("test");
+    builder2.table("test");
     try builder2.addColumn("id");
     try builder2.addColumn("name");
     try builder2.addColumn("age");
@@ -187,5 +224,20 @@ test "database" {
     try builder2.end();
 
     testing.expectEqualStrings("INSERT INTO test (id,name,age) VALUES (5,Test,3),(1,Test2,53),(3,Test3,53);", builder2.command());
+    builder2.deinit();
+
+    var builder3 = try Builder.new(.Update, allocator);
+    builder3.table("test");
+    try builder3.addColumn("id");
+    try builder3.addColumn("name");
+    try builder3.addColumn("age");
+
+    try builder3.addValue("5");
+    try builder3.addValue("Test");
+    try builder3.addValue("3");
+    try builder3.where(try helpers.buildQuery("WHERE NAME = {s};", .{"Steve"}, allocator));
+    try builder3.end();
+
+    testing.expectEqualStrings("UPDATE test SET id=5,name=Test,age=3 WHERE NAME = 'Steve';", builder3.command());
     builder2.deinit();
 }
