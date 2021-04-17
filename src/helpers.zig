@@ -41,25 +41,3 @@ pub fn RetypeValues(values: anytype) type {
     return @Type(values_info);
 }
 
-//Build query string for executing in sql
-pub fn buildQuery(comptime query: []const u8, values: anytype, allocator: *Allocator) ![]const u8 {
-    var parsed_values: RetypeValues(values) = undefined;
-
-    inline for (std.meta.fields(@TypeOf(parsed_values))) |field, index| {
-        const value = @field(values, field.name);
-
-        switch (field.field_type) {
-            comptime_int => {
-                @field(parsed_values, field.name) = @intCast(i32, value);
-                return;
-            },
-            i16, i32, u8, u16, u32, usize => {
-                @field(parsed_values, field.name) = @as(i32, value);
-            },
-            else => {
-                @field(parsed_values, field.name) = try std.fmt.allocPrint(allocator, "'{s}'", .{value});
-            },
-        }
-    }
-    return try std.fmt.allocPrint(allocator, query, parsed_values);
-}

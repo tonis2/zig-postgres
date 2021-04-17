@@ -7,7 +7,6 @@ const build_options = @import("build_options");
 
 pub const Builder = @import("./sql_builder.zig").Builder;
 pub const Parser = @import("./parser.zig");
-pub const FieldInfo = Definitions.FieldInfo;
 
 const helpers = @import("./helpers.zig");
 const Definitions = @import("./definitions.zig");
@@ -15,7 +14,9 @@ const Error = Definitions.Error;
 
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const Result = @import("./result.zig").Result;
+
+pub const Result = @import("./result.zig").Result;
+pub const FieldInfo = @import("./result.zig").FieldInfo;
 
 const print = std.debug.print;
 
@@ -161,7 +162,7 @@ pub const Pg = struct {
 
         const allocator = &temp_memory.allocator;
 
-        return self.exec(try helpers.buildQuery(query, values, allocator));
+        return self.exec(try Builder.buildQuery(query, values, allocator));
     }
 
     pub fn deinit(self: *Self) void {

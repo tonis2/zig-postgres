@@ -11,7 +11,11 @@ const ArrayList = std.ArrayList;
 
 const Definitions = @import("./definitions.zig");
 const Error = Definitions.Error;
-const FieldInfo = Definitions.FieldInfo;
+
+pub const FieldInfo = struct {
+    name: []const u8,
+    type: type,
+};
 
 pub const Result = struct {
     res: ?*c.PGresult,

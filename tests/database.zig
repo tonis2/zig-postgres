@@ -1,5 +1,5 @@
 const std = @import("std");
-const Postgres = @import("./postgres.zig");
+const Postgres = @import("postgres");
 const build_options = @import("build_options");
 
 const Pg = Postgres.Pg;

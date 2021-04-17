@@ -1,3 +1,4 @@
 comptime {
-    _ = @import("src/tests.zig");
+    _ = @import("tests/database.zig");
+    _ = @import("tests/sql_builder.zig");
 }

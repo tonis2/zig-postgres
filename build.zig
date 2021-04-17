@@ -36,6 +36,7 @@ pub fn build(b: *Builder) void {
     tests.setTarget(target);
     tests.linkSystemLibrary("c");
     tests.linkSystemLibrary("libpq");
+    tests.addPackagePath("postgres", "src/postgres.zig");
     tests.addBuildOption([]const u8, "db_uri", db_uri);
 
     const test_step = b.step("test", "Run tests");
