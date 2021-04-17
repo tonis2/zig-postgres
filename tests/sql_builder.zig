@@ -7,15 +7,14 @@ test "builder" {
     const allocator = &temp_memory.allocator;
     defer temp_memory.deinit();
 
-    var builder = try Builder.new(.Insert, allocator);
+    var builder = Builder.new(.Insert, allocator).table("test");
 
-    builder.table("test");
     try builder.addColumn("id");
     try builder.addColumn("name");
     try builder.addColumn("age");
 
     try builder.addValue("5");
-    try builder.addStringValue("Test");
+    try builder.addValue("Test");
     try builder.addValue("3");
     try builder.end();
 
@@ -23,8 +22,8 @@ test "builder" {
 
     builder.deinit();
 
-    var builder2 = try Builder.new(.Insert, allocator);
-    builder2.table("test");
+    var builder2 = Builder.new(.Insert, allocator).table("test");
+
     try builder2.addColumn("id");
     try builder2.addColumn("name");
     try builder2.addColumn("age");
@@ -42,11 +41,11 @@ test "builder" {
     try builder2.addValue("53");
     try builder2.end();
 
-    testing.expectEqualStrings("INSERT INTO test (id,name,age) VALUES (5,Test,3),(1,Test2,53),(3,Test3,53);", builder2.command());
+    testing.expectEqualStrings("INSERT INTO test (id,name,age) VALUES (5,'Test',3),(1,'Test2',53),(3,'Test3',53);", builder2.command());
     builder2.deinit();
 
-    var builder3 = try Builder.new(.Update, allocator);
-    builder3.table("test");
+    var builder3 = Builder.new(.Update, allocator).table("test").where(try Builder.buildQuery("WHERE NAME = {s};", .{"Steve"}, allocator));
+
     try builder3.addColumn("id");
     try builder3.addColumn("name");
     try builder3.addColumn("age");
@@ -54,9 +53,9 @@ test "builder" {
     try builder3.addValue("5");
     try builder3.addValue("Test");
     try builder3.addValue("3");
-    try builder3.where(try Builder.buildQuery("WHERE NAME = {s};", .{"Steve"}, allocator));
+
     try builder3.end();
 
-    testing.expectEqualStrings("UPDATE test SET id=5,name=Test,age=3 WHERE NAME = 'Steve';", builder3.command());
-    builder2.deinit();
+    testing.expectEqualStrings("UPDATE test SET id=5,name='Test',age=3 WHERE NAME = 'Steve';", builder3.command());
+    builder3.deinit();
 }

@@ -60,6 +60,27 @@ test "database" {
 
     while (result3.parse(Users, null)) |res| testing.expectEqual(res.age, 25);
 
+    //Temp memory
+    var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const temp_allocator = &temp_memory.allocator;
+
+    //SQL query builder
+    var builder = Builder.new(.Update, temp_allocator).table("users").where(try Builder.buildQuery("WHERE id = {d};", .{2}, temp_allocator));
+
+    defer {
+        builder.deinit();
+        temp_memory.deinit();
+    }
+
+    try builder.addColumn("name");
+    try builder.addValue("Harold");
+    try builder.end();
+
+    _ = try db.exec(builder.command());
+
+    var result5 = try db.execValues("SELECT * FROM users WHERE id = {d}", .{2});
+    var user4 = result5.parse(Users, null).?;
+
     testing.expectEqual(result.rows, 1);
     testing.expectEqual(result2.rows, 1);
     testing.expectEqual(result3.rows, 2);
@@ -73,6 +94,9 @@ test "database" {
 
     testing.expectEqual(user3.id, 4);
     testing.expectEqualStrings(user3.name, "Tony");
+
+    testing.expectEqual(user4.id, 2);
+    testing.expectEqualStrings(user4.name, "Harold");
 
     _ = try db.exec("DROP TABLE users");
 }

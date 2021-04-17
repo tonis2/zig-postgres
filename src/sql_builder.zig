@@ -12,17 +12,16 @@ const FieldInfo = @import("./result.zig").FieldInfo;
 pub const SQL = enum { Insert, Select, Delete, Update };
 
 pub const Builder = struct {
-    table_name: []const u8,
+    table_name: []const u8 = "",
+    where_clause: ?[]const u8 = null,
     buffer: ArrayList(u8),
     columns: ArrayList([]const u8),
     values: ArrayList([]const u8),
-    where_clause: ?[]const u8 = null,
     allocator: *Allocator,
     build_type: SQL,
 
-    pub fn new(build_type: SQL, allocator: *Allocator) Error!Builder {
+    pub fn new(build_type: SQL, allocator: *Allocator) Builder {
         return Builder{
-            .table_name = "",
             .buffer = ArrayList(u8).init(allocator),
             .columns = ArrayList([]const u8).init(allocator),
             .values = ArrayList([]const u8).init(allocator),
@@ -31,28 +30,37 @@ pub const Builder = struct {
         };
     }
 
-    pub fn table(self: *Builder, table_name: []const u8) void {
+    pub fn table(self: *Builder, table_name: []const u8) *Builder {
         self.table_name = table_name;
+        return self;
     }
 
-    pub fn where(self: *Builder, query: []const u8) !void {
+    pub fn where(self: *Builder, query: []const u8) *Builder {
         self.where_clause = query;
+        return self;
     }
 
     pub fn addColumn(self: *Builder, column_name: []const u8) !void {
         try self.columns.append(column_name);
     }
 
-    pub fn addStringValue(self: *Builder, value: []const u8) !void {
-        try self.values.append(try std.fmt.allocPrint(self.allocator, "'{s}'", .{value}));
-    }
-
-    pub fn addNumValue(self: *Builder, value: anytype) !void {
-        try self.values.append(try std.fmt.allocPrint(self.allocator, "{d}", .{value}));
-    }
-
-    pub fn addValue(self: *Builder, value: []const u8) !void {
-        try self.values.append(value);
+    pub fn addValue(self: *Builder, value: anytype) !void {
+        switch (@TypeOf(value)) {
+            u8, u16, u32, usize, i8, i16, i32 => {
+                try self.values.append(try std.fmt.allocPrint(self.allocator, "{d}", .{value}));
+            },
+            []const u8 => {
+                try self.values.append(try std.fmt.allocPrint(self.allocator, "'{s}'", .{value}));
+            },
+            else => {
+                const int: ?u32 = std.fmt.parseInt(u32, value, 10) catch |err| null;
+                if (int != null) {
+                    try self.values.append(try std.fmt.allocPrint(self.allocator, "{d}", .{int.?}));
+                } else {
+                    try self.values.append(try std.fmt.allocPrint(self.allocator, "'{s}'", .{value}));
+                }
+            },
+        }
     }
 
     pub fn addStringArray(self: *Builder, values: [][]const u8) !void {
@@ -78,13 +86,13 @@ pub const Builder = struct {
         if (@typeInfo(field_info.type) == .Optional and field_value == null) return;
         switch (field_info.type) {
             i16, i32, u8, u16, u32, usize => {
-                try self.addNumValue(field_value);
+                try self.addValue(field_value);
             },
             []const u8 => {
-                try self.addStringValue(field_value);
+                try self.addValue(field_value);
             },
             ?[]const u8 => {
-                try self.addStringValue(field_value.?);
+                try self.addValue(field_value.?);
             },
             else => {
                 if (extended) try @field(struct_info, "onSave")(field_info, self, field_value);
@@ -175,6 +183,8 @@ pub const Builder = struct {
     }
 
     pub fn deinit(self: *Builder) void {
+        if (self.where_clause != null) self.allocator.free(self.where_clause.?);
+
         self.columns.deinit();
         self.values.deinit();
         self.buffer.deinit();

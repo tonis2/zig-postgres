@@ -50,7 +50,7 @@ pub const Pg = struct {
         var temp_memory = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         const allocator = &temp_memory.allocator;
 
-        var builder = try Builder.new(.Insert, allocator);
+        var builder = Builder.new(.Insert, allocator);
         const type_info = @typeInfo(@TypeOf(data));
 
         defer {
@@ -68,7 +68,7 @@ pub const Pg = struct {
                         //Set table name as first items struct name.
                         if (child_index == 0) {
                             const struct_name = @typeName(@TypeOf(child));
-                            builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
+                            _ = builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
                         }
 
                         const struct_fields = @typeInfo(@TypeOf(child)).Struct.fields;
@@ -94,7 +94,7 @@ pub const Pg = struct {
                     const struct_name = @typeName(type_info.Pointer.child);
                     const is_extended = @hasDecl(type_info.Pointer.child, "onSave");
 
-                    builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
+                    _ = builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
 
                     inline for (struct_info.fields) |field, index| {
                         const field_type_info = @typeInfo(field.field_type);
@@ -114,7 +114,7 @@ pub const Pg = struct {
                 const struct_name = @typeName(@TypeOf(data));
                 const is_extended = @hasDecl(@TypeOf(data), "onSave");
 
-                builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
+                _ = builder.table(helpers.toLowerCase(struct_name.len, struct_name)[0..]);
                 inline for (struct_info.fields) |field, index| {
                     const field_type_info = @typeInfo(field.field_type);
                     const field_value = @field(data, field.name);
