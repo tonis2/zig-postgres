@@ -44,20 +44,28 @@ pub const Builder = struct {
         try self.columns.append(column_name);
     }
 
+    pub fn addIntValue(self: *Builder, value: anytype) !void {
+        try self.values.append(try std.fmt.allocPrint(self.allocator, "{d}", .{value}));
+    }
+
+    pub fn addStringValue(self: *Builder, value: []const u8) !void {
+        try self.values.append(try std.fmt.allocPrint(self.allocator, "'{s}'", .{value}));
+    }
+
     pub fn addValue(self: *Builder, value: anytype) !void {
         switch (@TypeOf(value)) {
             u8, u16, u32, usize, i8, i16, i32 => {
-                try self.values.append(try std.fmt.allocPrint(self.allocator, "{d}", .{value}));
+                try self.addIntValue(value);
             },
             []const u8 => {
-                try self.values.append(try std.fmt.allocPrint(self.allocator, "'{s}'", .{value}));
+                try self.addStringValue(value);
             },
             else => {
                 const int: ?u32 = std.fmt.parseInt(u32, value, 10) catch |err| null;
                 if (int != null) {
-                    try self.values.append(try std.fmt.allocPrint(self.allocator, "{d}", .{int.?}));
+                    try self.addIntValue(int.?);
                 } else {
-                    try self.values.append(try std.fmt.allocPrint(self.allocator, "'{s}'", .{value}));
+                    try self.addStringValue(value);
                 }
             },
         }
@@ -86,13 +94,13 @@ pub const Builder = struct {
         if (@typeInfo(field_info.type) == .Optional and field_value == null) return;
         switch (field_info.type) {
             i16, i32, u8, u16, u32, usize => {
-                try self.addValue(field_value);
+                try self.addIntValue(field_value);
             },
             []const u8 => {
-                try self.addValue(field_value);
+                try self.addStringValue(field_value);
             },
             ?[]const u8 => {
-                try self.addValue(field_value.?);
+                try self.addStringValue(field_value.?);
             },
             else => {
                 if (extended) try @field(struct_info, "onSave")(field_info, self, field_value);
