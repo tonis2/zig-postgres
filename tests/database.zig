@@ -190,12 +190,12 @@ test "Nullable type" {
     });
 
     var result = try db.execValues("SELECT * FROM keyValue WHERE value = {d}", .{42});
-    var value42 = result5.parse(KeyValue, null).?;
+    var value42 = result.parse(KeyValue, null).?;
     testing.expect(value42.id != null);
     testing.expectEqual(value42.value, 42);
 
-    var result = try db.execValues("SELECT * FROM keyValue WHERE value = {d}", .{33});
-    var value33 = result5.parse(KeyValue, null).?;
+    var result2 = try db.execValues("SELECT * FROM keyValue WHERE value = {d}", .{33});
+    var value33 = result2.parse(KeyValue, null).?;
     testing.expect(value33.id != null);
     testing.expect(value33.id > value42.id);
 
