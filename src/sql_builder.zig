@@ -90,7 +90,7 @@ pub const Builder = struct {
         _ = try self.values.append(self.buffer.toOwnedSlice());
     }
 
-    pub fn autoAdd(self: *Builder, struct_info: anytype, comptime field_info: FieldInfo, field_value: anytype, extended: bool) !void {
+    pub fn autoAdd(self: *Builder, struct_info: anytype, comptime field_info: FieldInfo, field_value: anytype, comptime extended: bool) !void {
         if (@typeInfo(field_info.type) == .Optional and field_value == null) return;
         switch (field_info.type) {
             i16, i32, u8, u16, u32, usize => {

@@ -162,3 +162,42 @@ test "Custom types" {
 
     _ = try db.exec("DROP TABLE player");
 }
+
+const KeyValue = struct {
+    id: ?u32 = null,
+    value: i32,
+};
+
+test "Nullable type" {
+    var db = try Pg.connect(allocator, build_options.db_uri);
+
+    defer {
+        std.debug.assert(!gpa.deinit());
+        db.deinit();
+    }
+
+    const schema =
+        \\CREATE DATABASE IF NOT EXISTS root;
+        \\CREATE TABLE IF NOT EXISTS keyValue (id SERIAL PRIMARY KEY, value int);
+    ;
+
+    _ = try db.exec(schema);
+
+    _ = try db.insert(&[_]KeyValue{
+        KeyValue{ .value = 42 },
+        KeyValue{ .value = 741 },
+        KeyValue{ .value = 33 },
+    });
+
+    var result = try db.execValues("SELECT * FROM keyValue WHERE value = {d}", .{42});
+    var value42 = result.parse(KeyValue, null).?;
+    testing.expect(value42.id != null);
+    testing.expectEqual(value42.value, 42);
+
+    var result2 = try db.execValues("SELECT * FROM keyValue WHERE value = {d}", .{33});
+    var value33 = result2.parse(KeyValue, null).?;
+    testing.expect(value33.id != null);
+    testing.expect(value33.id > value42.id);
+
+    _ = try db.exec("DROP TABLE keyValue");
+}
